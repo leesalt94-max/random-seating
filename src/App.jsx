@@ -146,9 +146,9 @@ function App() {
       <div className="app-container">
         <div className="setup-view">
           <h1 className="setup-title">우리반 자리배치표</h1>
-          <div className="input-group" style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <label style={{ fontSize: '1.5rem', color: 'var(--chalk-yellow)' }}>가로 (분단 수)</label>
+          <div className="input-group setup-inputs">
+            <div className="input-wrapper">
+              <label className="input-label">가로 (분단 수)</label>
               <input 
                 type="number" 
                 className="student-input" 
@@ -161,9 +161,9 @@ function App() {
                 autoFocus
               />
             </div>
-            <span style={{ fontSize: '3rem', margin: '0 20px', marginTop: '40px' }}>×</span>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <label style={{ fontSize: '1.5rem', color: 'var(--chalk-yellow)' }}>세로 (줄 수)</label>
+            <span className="multiply-sign">×</span>
+            <div className="input-wrapper">
+              <label className="input-label">세로 (줄 수)</label>
               <input 
                 type="number" 
                 className="student-input" 
@@ -176,7 +176,7 @@ function App() {
               />
             </div>
           </div>
-          <button className="start-btn" onClick={handleStart} style={{ marginTop: '2rem' }}>
+          <button className="start-btn" onClick={handleStart}>
             자리판 만들기
           </button>
         </div>
@@ -213,19 +213,21 @@ function App() {
           </p>
         )}
 
-        <div 
-          className="desk-grid" 
-          style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}
-        >
-          {seats.map((seat, index) => (
-            <Desk 
-              key={index} 
-              seat={seat} 
-              isRevealed={index < revealedCount || seat.status === 'fixed'} 
-              onClick={() => openModal(index)}
-              isPreparing={isPreparing}
-            />
-          ))}
+        <div className="desk-grid-container">
+          <div 
+            className="desk-grid" 
+            style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}
+          >
+            {seats.map((seat, index) => (
+              <Desk 
+                key={index} 
+                seat={seat} 
+                isRevealed={index < revealedCount || seat.status === 'fixed'} 
+                onClick={() => openModal(index)}
+                isPreparing={isPreparing}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
