@@ -209,14 +209,17 @@ function App() {
 
         {isPreparing && (
           <p className="hint-text">
-            자리 뽑기 전에 책상을 클릭하여 '제외석'이나 '지정석'을 설정할 수 있습니다.
+            📌 책상 클릭 → 제외/지정석 설정 가능
           </p>
         )}
 
         <div className="desk-grid-container">
           <div 
             className="desk-grid" 
-            style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}
+            style={{
+              gridTemplateColumns: `repeat(${cols}, minmax(55px, 1fr))`,
+              width: '100%',
+            }}
           >
             {seats.map((seat, index) => (
               <Desk 
