@@ -1,7 +1,39 @@
 @import url('https://fonts.googleapis.com/css2?family=Jua&family=Outfit:wght@400;600;800&display=swap');
 
+/* Material Symbols 공통 스타일 */
+.material-symbols-rounded {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 1.2em;
+  display: inline-block;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  word-wrap: normal;
+  white-space: nowrap;
+  direction: ltr;
+  vertical-align: middle;
+  font-variation-settings:
+    'FILL' 1,
+    'wght' 500,
+    'GRAD' 0,
+    'opsz' 24;
+  user-select: none;
+}
+
+.material-symbols-rounded.spin {
+  animation: icon-spin 1s linear infinite;
+}
+
+@keyframes icon-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 :root {
   --wood-dark: #3e2723;
+
   --wood-light: #5d4037;
   --chalkboard: #1b3a2a;
   --chalkboard-dark: #12281c;
@@ -207,6 +239,9 @@ body {
   cursor: pointer;
   transition: all 0.3s;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .control-btn:hover:not(:disabled) {
@@ -482,5 +517,375 @@ body {
   .setup-view {
     gap: 1rem;
     padding: 0.5rem 0;
+  }
+}
+
+/* control-btn success (인쇄 버튼) */
+.control-btn.success {
+  background: #69f0ae;
+  color: #1b3a2a;
+  border: none;
+  font-weight: bold;
+}
+.control-btn.success:hover:not(:disabled) {
+  background: #b9fbd7;
+}
+
+/* ========================= */
+/*      PRINT OVERLAY        */
+/* ========================= */
+.print-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: #e8e0d8;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 상단 컨트롤 패널 */
+.print-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.8rem 1.2rem;
+  background: var(--wood-dark);
+  border-bottom: 3px solid var(--wood-light);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.pctrl-center {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex: 1;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.pctrl-right {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.pctrl-btn {
+  font-family: 'Jua', sans-serif;
+  font-size: clamp(0.9rem, 3vw, 1.2rem);
+  padding: 0.5rem 1.1rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.close-btn {
+  background: rgba(255,255,255,0.15);
+  color: var(--chalk-white);
+  border: 1px solid rgba(255,255,255,0.3);
+}
+.close-btn:hover { background: rgba(255,255,255,0.25); }
+
+.upload-btn {
+  background: rgba(255,255,255,0.15);
+  color: var(--chalk-white);
+  border: 1px solid rgba(255,255,255,0.3);
+}
+.upload-btn:hover { background: rgba(255,255,255,0.25); }
+
+.image-btn {
+  background: #4fc3f7;
+  color: #012a3a;
+}
+.image-btn:hover:not(:disabled) { background: #81d4fa; }
+.image-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.print-btn {
+  background: var(--chalk-yellow);
+  color: var(--wood-dark);
+  font-weight: bold;
+}
+.print-btn:hover { background: #fff0a8; }
+
+.class-name-input {
+  font-family: 'Jua', sans-serif;
+  font-size: 1rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.1);
+  color: var(--chalk-white);
+  outline: none;
+  text-align: center;
+  width: 130px;
+}
+.class-name-input:focus {
+  border-color: var(--chalk-yellow);
+}
+
+.dummy-badge {
+  font-family: 'Jua', sans-serif;
+  font-size: 0.85rem;
+  background: rgba(255, 200, 0, 0.25);
+  color: var(--chalk-yellow);
+  border: 1px solid var(--chalk-yellow);
+  border-radius: 20px;
+  padding: 0.25rem 0.8rem;
+  white-space: nowrap;
+}
+
+/* 더미 안내 배너 */
+.dummy-notice {
+  text-align: center;
+  font-family: 'Jua', sans-serif;
+  font-size: clamp(0.75rem, 2.5vw, 0.95rem);
+  background: rgba(248, 225, 118, 0.15);
+  color: var(--chalk-yellow);
+  padding: 0.4rem 1rem;
+  flex-shrink: 0;
+}
+
+/* 인쇄 시트 래퍼 (스크롤 가능) */
+.print-sheet-wrapper {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 1.5rem;
+}
+
+/* 실제 인쇄될 시트 */
+.print-sheet {
+  background: #ffffff;
+  box-shadow: 0 4px 30px rgba(0,0,0,0.25);
+  border-radius: 6px;
+  width: 100%;
+  max-width: 900px;
+  padding: clamp(1.2rem, 4vw, 2.5rem);
+  font-family: 'Jua', sans-serif;
+  color: #1a1a1a;
+}
+
+.ps-header {
+  text-align: center;
+  margin-bottom: 1.2rem;
+  border-bottom: 3px solid #3e2723;
+  padding-bottom: 0.8rem;
+}
+
+.ps-title {
+  font-size: clamp(1.4rem, 5vw, 2.2rem);
+  color: #3e2723;
+  letter-spacing: 2px;
+}
+
+.ps-date {
+  font-size: clamp(0.8rem, 2.5vw, 1rem);
+  color: #666;
+  margin-top: 0.3rem;
+}
+
+.ps-teacher-desk {
+  text-align: center;
+  background: #3e2723;
+  color: #f8e176;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-size: clamp(1rem, 3.5vw, 1.4rem);
+  margin-bottom: 1.2rem;
+  letter-spacing: 3px;
+}
+
+/* 자리 그리드 */
+.ps-grid {
+  display: grid;
+  gap: clamp(0.4rem, 1.5vw, 0.8rem);
+  margin-bottom: 1rem;
+}
+
+.ps-cell {
+  border: 2px solid #c8b89a;
+  border-radius: 8px;
+  background: #fffdf8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(0.3rem, 1.5vw, 0.7rem) 0.3rem;
+  aspect-ratio: 4 / 3;
+  text-align: center;
+  transition: background 0.2s;
+  min-height: 50px;
+}
+
+.ps-cell.fixed {
+  border-color: #f8a100;
+  background: #fffbec;
+}
+
+.ps-cell.excluded {
+  background: #f0f0f0;
+  border-color: #ccc;
+  border-style: dashed;
+}
+
+.cell-num {
+  font-size: clamp(0.6rem, 2vw, 0.85rem);
+  color: #888;
+  line-height: 1;
+}
+
+.cell-name {
+  font-size: clamp(0.85rem, 3vw, 1.3rem);
+  font-weight: bold;
+  color: #1a1a1a;
+  line-height: 1.2;
+  word-break: keep-all;
+}
+
+.cell-x {
+  font-size: clamp(0.6rem, 2vw, 0.8rem);
+  color: #aaa;
+}
+
+.ps-dummy-note {
+  font-size: 0.75rem;
+  color: #aaa;
+  text-align: center;
+  margin-top: 0.8rem;
+}
+
+/* 시점 레이블 */
+.ps-view-label {
+  font-size: 0.85em;
+  padding: 0.15rem 0.6rem;
+  border-radius: 20px;
+  font-weight: bold;
+}
+.ps-view-label.teacher {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.ps-view-label.student {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+/* 시점 안내 배너 */
+.ps-perspective-banner {
+  text-align: center;
+  font-size: clamp(0.7rem, 2vw, 0.9rem);
+  padding: 0.35rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  font-weight: normal;
+  letter-spacing: 0.5px;
+}
+.ps-perspective-teacher {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+.ps-perspective-student {
+  background: #e3f2fd;
+  color: #1565c0;
+  border: 1px solid #90caf9;
+}
+
+/* 교탁 하단 (교사 시점) */
+.ps-desk-bottom {
+  margin-top: 1.2rem;
+  margin-bottom: 0;
+}
+
+/* 시점 전환 토글 버튼 */
+.view-toggle-btn {
+  background: rgba(255,255,255,0.15);
+  color: var(--chalk-white);
+  border: 1px solid rgba(255,255,255,0.3);
+}
+.view-toggle-btn:hover {
+  background: rgba(255,255,255,0.25);
+}
+.view-toggle-btn.teacher-active {
+  background: rgba(105, 240, 174, 0.25);
+  color: #69f0ae;
+  border-color: #69f0ae;
+}
+
+/* ========================= */
+/*       @MEDIA PRINT        */
+/* ========================= */
+@media print {
+  /* 인쇄 시 화면 UI 전부 숨기기 */
+  .no-print,
+  .dummy-notice,
+  .print-controls,
+  .board-view,
+  .setup-view,
+  .modal-overlay {
+    display: none !important;
+  }
+
+  /* 인쇄 오버레이를 일반 흐름으로 */
+  .print-overlay {
+    position: static;
+    background: white;
+  }
+
+  .print-sheet-wrapper {
+    padding: 0;
+    overflow: visible;
+  }
+
+  .print-sheet {
+    box-shadow: none;
+    max-width: 100%;
+    padding: 10mm 12mm;
+  }
+
+  /* 페이지 설정 */
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  body {
+    background: white !important;
+    min-height: unset;
+  }
+
+  .ps-cell {
+    break-inside: avoid;
+  }
+}
+
+/* ========================= */
+/*   PRINT - SMALL SCREEN    */
+/* ========================= */
+@media (max-width: 480px) {
+  .print-controls {
+    padding: 0.5rem 0.7rem;
+  }
+
+  .pctrl-right {
+    gap: 0.4rem;
+  }
+
+  .pctrl-btn {
+    padding: 0.4rem 0.7rem;
+    font-size: 0.85rem;
+  }
+
+  .print-sheet-wrapper {
+    padding: 0.7rem;
   }
 }
