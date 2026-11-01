@@ -1,453 +1,494 @@
-import { useState, useRef } from 'react';
-import * as XLSX from 'xlsx';
-import html2canvas from 'html2canvas';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { shuffle, sleep, parseNumberList, formatNumberList, presetGaps, fitArray, gridTracks } from './utils';
+import { readRosterFile, rosterSummary, downloadRosterTemplate } from './roster';
+import { sound } from './sound';
+import ResultOverlay from './ResultOverlay';
+import Confetti from './Confetti';
 
-// Fisher-Yates Shuffle
-function shuffleArray(array) {
-  const newArr = [...array];
-  for (let i = newArr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+const STORE_KEY = 'random-seating:v2';
+
+function loadStore() {
+  try {
+    return JSON.parse(localStorage.getItem(STORE_KEY)) || {};
+  } catch {
+    return {};
   }
-  return newArr;
 }
 
-// 더미 학생 데이터 (30명)
-const DUMMY_STUDENTS = {
-  1: '김민준', 2: '이서연', 3: '박지호', 4: '최수아', 5: '정우진',
-  6: '강하은', 7: '조민서', 8: '윤지원', 9: '임도현', 10: '한채원',
-  11: '오세준', 12: '신예린', 13: '서태양', 14: '권나연', 15: '배준혁',
-  16: '유소희', 17: '문지훈', 18: '김아린', 19: '이현우', 20: '박서진',
-  21: '최민아', 22: '정시후', 23: '강도윤', 24: '조예서', 25: '윤태오',
-  26: '임수빈', 27: '한지민', 28: '오준서', 29: '신다은', 30: '서민재'
+function saveStore(data) {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(data));
+  } catch {
+    // 저장할 수 없는 환경(시크릿 창 등)은 무시
+  }
+}
+
+// shuffle: 섞는 시간, roll: 한 자리 번호가 돌아가는 시간, hold: 공개 직전 멈칫하는 시간
+const SPEEDS = {
+  slow: { label: '천천히 (긴장감 MAX)', shuffle: 3200, roll: 750, pause: 180, hold: 260, countdown: true },
+  normal: { label: '보통 속도', shuffle: 2600, roll: 400, pause: 80, hold: 0, countdown: true },
+  fast: { label: '빠르게', shuffle: 1400, roll: 150, pause: 20, hold: 0, countdown: false },
+  click: { label: '클릭해서 한 자리씩', shuffle: 2600, roll: 550, pause: 0, hold: 200, countdown: true },
 };
 
-// ========================
-//   PRINT VIEW COMPONENT
-// ========================
-function PrintView({ seats, cols, onClose }) {
-  const printRef = useRef(null);
-  const [nameMap, setNameMap] = useState(DUMMY_STUDENTS);
-  const [usingDummy, setUsingDummy] = useState(true);
-  const [isSavingImage, setIsSavingImage] = useState(false);
-  const [className, setClassName] = useState('1학년 1반');
-  // 기본값: 교사 시점 (칠판을 등지고 학생과 마주보는 방향 → 좌우 반전)
-  const [teacherView, setTeacherView] = useState(true);
+const PAIR_PRESETS = [
+  { v: '1', label: '모두 떨어짐' },
+  { v: '2', label: '2명씩 짝' },
+  { v: '3', label: '3명씩' },
+  { v: '0', label: '모두 붙임' },
+];
 
-  const numCols = parseInt(cols) || 1;
+const emptySeat = () => ({ status: 'empty', studentNum: null });
 
-  // ── 교사 시점 변환 ──────────────────────────────────
-  // 교사는 칠판을 등지고 학생을 바라보므로 각 행의 좌우가 반전
-  const displaySeats = (() => {
-    if (!teacherView) return seats;
-    const result = [];
-    for (let r = 0; r < seats.length; r += numCols) {
-      const row = seats.slice(r, r + numCols);
-      result.push(...[...row].reverse());
-    }
-    return result;
-  })();
-
-  // Excel/CSV 업로드 파싱
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const wb = XLSX.read(evt.target.result, { type: 'binary' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
-        const map = {};
-        data.forEach((row) => {
-          const num = parseInt(row[0]);
-          const name = row[1];
-          if (!isNaN(num) && name) {
-            map[num] = String(name).trim();
-          }
-        });
-        if (Object.keys(map).length === 0) {
-          alert('파일에서 번호/이름 데이터를 찾지 못했습니다.\nA열: 번호, B열: 이름 형식으로 작성해주세요.');
-          return;
-        }
-        setNameMap(map);
-        setUsingDummy(false);
-      } catch {
-        alert('파일을 읽는 중 오류가 발생했습니다.');
-      }
-    };
-    reader.readAsBinaryString(file);
-  };
-
-  // 브라우저 인쇄 (PDF 저장 가능)
-  const handlePrint = () => {
-    window.print();
-  };
-
-  // 이미지로 저장
-  const handleSaveImage = async () => {
-    if (!printRef.current || isSavingImage) return;
-    setIsSavingImage(true);
-    try {
-      const canvas = await html2canvas(printRef.current, {
-        scale: 2,
-        backgroundColor: '#ffffff',
-        useCORS: true,
-      });
-      const link = document.createElement('a');
-      link.download = `자리배치표_${className}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } catch {
-      alert('이미지 저장 중 오류가 발생했습니다.');
-    } finally {
-      setIsSavingImage(false);
-    }
-  };
-
-  const today = new Date().toLocaleDateString('ko-KR', {
-    year: 'numeric', month: 'long', day: 'numeric'
-  });
-
+function Icon({ name, style }) {
   return (
-    <div className="print-overlay">
-      {/* 상단 컨트롤 패널 (인쇄 시 숨김) */}
-      <div className="print-controls no-print">
-        <button className="pctrl-btn close-btn" onClick={onClose}>
-          <span className="material-symbols-rounded">close</span> 닫기
-        </button>
-
-        <div className="pctrl-center">
-          <input
-            type="text"
-            className="class-name-input"
-            value={className}
-            onChange={(e) => setClassName(e.target.value)}
-            placeholder="반 이름 입력"
-          />
-          <label className="pctrl-btn upload-btn">
-            <span className="material-symbols-rounded">upload_file</span> 엑셀 업로드
-            <input
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={handleFileUpload}
-              hidden
-            />
-          </label>
-          {usingDummy && (
-            <span className="dummy-badge">더미 데이터 사용 중</span>
-          )}
-        </div>
-
-        <div className="pctrl-right">
-          {/* 시점 전환 토글 */}
-          <button
-            className={`pctrl-btn view-toggle-btn ${teacherView ? 'teacher-active' : ''}`}
-            onClick={() => setTeacherView(v => !v)}
-            title={teacherView ? '교사 시점 (클릭 시 학생 시점으로 전환)' : '학생 시점 (클릭 시 교사 시점으로 전환)'}
-          >
-            <span className="material-symbols-rounded">
-              {teacherView ? 'person_pin' : 'groups'}
-            </span>
-            {teacherView ? '교사 시점' : '학생 시점'}
-          </button>
-
-          <button
-            className="pctrl-btn image-btn"
-            onClick={handleSaveImage}
-            disabled={isSavingImage}
-          >
-            {isSavingImage
-              ? <><span className="material-symbols-rounded spin">progress_activity</span> 저장 중...</>
-              : <><span className="material-symbols-rounded">image</span> 이미지 저장</>
-            }
-          </button>
-          <button className="pctrl-btn print-btn" onClick={handlePrint}>
-            <span className="material-symbols-rounded">print</span> PDF 인쇄
-          </button>
-        </div>
-      </div>
-
-      {/* 인쇄 안내 */}
-      {usingDummy && (
-        <div className="dummy-notice no-print">
-          <span className="material-symbols-rounded" style={{fontSize:'1rem',verticalAlign:'middle'}}>info</span>{' '}
-          현재 <strong>더미 데이터</strong>가 사용 중입니다. 실제 학생 명단 엑셀(A열: 번호 / B열: 이름)을 업로드하세요.
-        </div>
-      )}
-
-      {/* 인쇄될 자리배치표 */}
-      <div className="print-sheet-wrapper">
-        <div className="print-sheet" ref={printRef}>
-
-          {/* 문서 헤더 */}
-          <div className="ps-header">
-            <h1 className="ps-title">{className} 자리배치표</h1>
-            <p className="ps-date">
-              {today}&nbsp;
-              <span className={`ps-view-label ${teacherView ? 'teacher' : 'student'}`}>
-                {teacherView ? '📐 교사 시점' : '🎒 학생 시점'}
-              </span>
-            </p>
-          </div>
-
-          {/* 학생 시점: 칠판이 위쪽 */}
-          {!teacherView && (
-            <div className="ps-teacher-desk">
-              <span>
-                <span className="material-symbols-rounded" style={{fontSize:'1.1em',verticalAlign:'middle'}}>menu_book</span>
-                {' '}교 탁 / 칠 판
-              </span>
-            </div>
-          )}
-
-          {/* 시점 안내 배너 */}
-          <div className={`ps-perspective-banner ${teacherView ? 'ps-perspective-teacher' : 'ps-perspective-student'}`}>
-            {teacherView
-              ? '← 교사 기준: 왼쪽 분단 / 앞줄이 교사 바로 앞 →'
-              : '← 학생 기준: 왼쪽 분단 / 앞줄이 칠판 바로 앞 →'
-            }
-          </div>
-
-          {/* 자리 그리드 */}
-          <div
-            className="ps-grid"
-            style={{ gridTemplateColumns: `repeat(${numCols}, 1fr)` }}
-          >
-            {displaySeats.map((seat, index) => {
-              if (seat.status === 'excluded') {
-                return (
-                  <div key={index} className="ps-cell excluded">
-                    <span className="cell-x">빈자리</span>
-                  </div>
-                );
-              }
-              const num = seat.studentNum;
-              const name = num ? (nameMap[num] || '?') : '-';
-              return (
-                <div key={index} className={`ps-cell ${seat.status === 'fixed' ? 'fixed' : ''}`}>
-                  <span className="cell-num">{num ? `${num}번` : ''}</span>
-                  <span className="cell-name">{name}</span>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* 교사 시점: 칠판이 아래쪽 (교사 등 뒤) */}
-          {teacherView && (
-            <div className="ps-teacher-desk ps-desk-bottom">
-              <span>
-                <span className="material-symbols-rounded" style={{fontSize:'1.1em',verticalAlign:'middle'}}>menu_book</span>
-                {' '}교 탁 / 칠 판 &nbsp;|&nbsp; 교사 위치
-              </span>
-            </div>
-          )}
-
-          {/* 더미 안내 (인쇄물에도 표시) */}
-          {usingDummy && (
-            <p className="ps-dummy-note">※ 더미 데이터 적용됨 — 실제 명단으로 교체 후 인쇄하세요</p>
-          )}
-        </div>
-      </div>
-    </div>
+    <span className="material-symbols-rounded" style={style}>
+      {name}
+    </span>
   );
 }
 
-// ========================
-//    DESK COMPONENT
-// ========================
-function Desk({ seat, isRevealed, onClick, isPreparing, isSwapMode, isSelected, isJustSwapped }) {
+function Desk({ seat, revealed, active, frontValue, roster, clickable, pending, shuffling, joinL, joinR, onClick, style }) {
   const { status, studentNum } = seat;
-  const isClickable = isPreparing || isSwapMode;
-  const classes = [
+  const backName = studentNum && roster ? roster[studentNum] : null;
+  const cls = [
     'desk-wrapper',
-    isRevealed ? 'flipped' : '',
+    revealed ? 'flipped' : '',
     status === 'excluded' ? 'excluded' : '',
     status === 'fixed' ? 'fixed' : '',
-    isClickable ? 'clickable' : '',
-    isSwapMode ? 'swap-mode' : '',
-    isSelected ? 'swap-selected' : '',
-    isJustSwapped ? 'just-swapped' : ''
-  ].filter(Boolean).join(' ');
+    clickable ? 'clickable' : '',
+    active ? 'active' : '',
+    pending ? 'pending' : '',
+    shuffling ? 'shuffling' : '',
+    joinL ? 'join-l' : '',
+    joinR ? 'join-r' : '',
+    frontValue != null ? 'rolling' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
-    <div className={classes} onClick={isClickable ? onClick : undefined}>
+    <div className={cls} style={style} onClick={clickable ? onClick : undefined}>
       <div className="desk-inner">
-        <div className="desk-front"></div>
-        <div className="desk-back">
-          {status === 'excluded'
-            ? (isSwapMode ? <span className="desk-empty-label">빈자리</span> : '')
-            : studentNum}
+        <div className="desk-front">
+          {frontValue != null && (
+            <span className="roll">
+              <span className="roll-num">{frontValue}</span>
+              {roster?.[frontValue] && <span className="roll-name">{roster[frontValue]}</span>}
+            </span>
+          )}
+        </div>
+        <div className={`desk-back ${backName ? 'has-name' : ''}`}>
+          {status === 'excluded' ? null : studentNum ? (
+            <>
+              <span className="back-num">{studentNum}</span>
+              {backName && <span className="back-name">{backName}</span>}
+            </>
+          ) : (
+            <span className="back-empty">빈자리</span>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-// ========================
-//      MAIN APP
-// ========================
-function App() {
-  const [view, setView] = useState('setup');
-  const [rows, setRows] = useState('');
-  const [cols, setCols] = useState('');
-  const [seats, setSeats] = useState([]);
-  const [revealedCount, setRevealedCount] = useState(0);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [selectedDesk, setSelectedDesk] = useState(null);
-  const [fixedNumInput, setFixedNumInput] = useState('');
-  const [showPrint, setShowPrint] = useState(false);
-  // 자리 바꾸기 (배치 완료 후)
-  const [swapMode, setSwapMode] = useState(false);
-  const [swapFrom, setSwapFrom] = useState(null);
-  const [swapHistory, setSwapHistory] = useState([]);
-  const [justSwapped, setJustSwapped] = useState([]);
-  const swapTimerRef = useRef(null);
+// 설정 화면 옆에 뜨는 자리판 미리보기 (짝/통로, 제외·지정석 반영)
+function LayoutPreview({ cols, rows, colGaps, rowGaps, marks }) {
+  if (!(cols > 0 && rows > 0)) {
+    return <div className="layout-preview empty">가로·세로를 입력하면 미리보기가 나와요</div>;
+  }
+  if (cols > 20 || rows > 20 || cols * rows > 150) {
+    return <div className="layout-preview empty warn">자리가 너무 많아요 (최대 150석)</div>;
+  }
+  const w = Math.max(9, Math.min(28, Math.floor(210 / cols)));
+  const h = Math.round(w * 0.72);
+  const cells = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const mark = marks?.[r * cols + c];
+      cells.push(
+        <span
+          key={r * cols + c}
+          className={`lp-desk ${mark === 'excluded' ? 'excluded' : mark === 'fixed' ? 'fixed' : ''}`}
+          style={{ gridRow: r * 2 + 1, gridColumn: c * 2 + 1 }}
+        />,
+      );
+    }
+  }
+  return (
+    <div className="layout-preview" aria-label={`자리 미리보기 ${cols} × ${rows}`}>
+      <div className="lp-banner">교 탁</div>
+      <div
+        className="lp-grid"
+        style={{
+          gridTemplateColumns: gridTracks(cols, colGaps, `${w}px`, '2px', `${Math.max(6, Math.round(w * 0.45))}px`),
+          gridTemplateRows: gridTracks(rows, rowGaps, `${h}px`, '4px', `${Math.max(8, Math.round(h * 0.7))}px`),
+        }}
+      >
+        {cells}
+      </div>
+      <div className="lp-caption">
+        {cols} × {rows} = <b>{cols * rows}석</b>
+      </div>
+    </div>
+  );
+}
 
-  // Initialize board
-  const handleStart = () => {
-    const r = parseInt(rows, 10);
+export default function App() {
+  const saved = useMemo(loadStore, []);
+  const [view, setView] = useState('setup');
+  const [cols, setCols] = useState(saved.cols ?? '6');
+  const [rows, setRows] = useState(saved.rows ?? '4');
+  const [maxNum, setMaxNum] = useState(saved.maxNum ?? '');
+  const [excludedText, setExcludedText] = useState(saved.excludedText ?? '');
+  const [pairSize, setPairSize] = useState(saved.pairSize ?? '2');
+  const [colGaps, setColGaps] = useState(saved.colGaps ?? []);
+  const [rowGaps, setRowGaps] = useState(saved.rowGaps ?? []);
+  const [dims, setDims] = useState(null);
+  const [seats, setSeats] = useState([]);
+  const [roster, setRoster] = useState(saved.roster ?? null);
+  const [className, setClassName] = useState(saved.className ?? '1학년 1반');
+  const [revealMode, setRevealMode] = useState(SPEEDS[saved.revealMode] ? saved.revealMode : 'normal');
+  const [soundOn, setSoundOn] = useState(saved.soundOn ?? true);
+
+  // 뽑기 진행 상태: prepare → shuffling → countdown → revealing → done
+  const [phase, setPhase] = useState('prepare');
+  const [revealed, setRevealed] = useState(() => new Set());
+  const [activeIdx, setActiveIdx] = useState(null);
+  const [rollValue, setRollValue] = useState(null);
+  const [rollPool, setRollPool] = useState([]);
+  const [flicker, setFlicker] = useState(0);
+  const [countdown, setCountdown] = useState(null);
+
+  const [editIdx, setEditIdx] = useState(null);
+  const [editNum, setEditNum] = useState('');
+  const [overlay, setOverlay] = useState(null);
+  const [confetti, setConfetti] = useState(0);
+  const [toast, setToast] = useState(null);
+
+  const runRef = useRef(0);
+  const skipRef = useRef(false);
+  const busyRef = useRef(false);
+  const drawRef = useRef(null);
+
+  useEffect(() => {
+    sound.setEnabled(soundOn);
+  }, [soundOn]);
+
+  useEffect(() => {
+    const seatSetup =
+      dims && seats.length
+        ? {
+            cols: dims.cols,
+            rows: dims.rows,
+            cells: seats.map((s) => (s.status === 'excluded' ? 'x' : s.status === 'fixed' ? s.studentNum : 0)),
+          }
+        : saved.seatSetup;
+    saveStore({ cols, rows, maxNum, excludedText, pairSize, colGaps, rowGaps, seatSetup, roster, className, revealMode, soundOn });
+  }, [cols, rows, maxNum, excludedText, pairSize, colGaps, rowGaps, dims, seats, roster, className, revealMode, soundOn, saved]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const showToast = (msg) => setToast({ msg, id: Date.now() });
+
+  const excludedNums = useMemo(() => parseNumberList(excludedText), [excludedText]);
+  const excludedSet = useMemo(() => new Set(excludedNums), [excludedNums]);
+  const rosterInfo = useMemo(() => rosterSummary(roster), [roster]);
+
+  // ── 자리판 기준 계산 ──
+  const usableSeats = seats.filter((s) => s.status !== 'excluded').length;
+  const fixedSet = new Set(seats.filter((s) => s.status === 'fixed').map((s) => s.studentNum));
+  const topNum = parseInt(maxNum, 10) > 0 ? parseInt(maxNum, 10) : usableSeats;
+  const pool = [];
+  for (let i = 1; i <= topNum; i++) if (!excludedSet.has(i) && !fixedSet.has(i)) pool.push(i);
+  const drawableCount = seats.filter((s) => s.status === 'empty').length;
+  const shortage = pool.length - drawableCount;
+
+  // ── 설정 화면 기준 계산 ──
+  const setupC = parseInt(cols, 10) || 0;
+  const setupR = parseInt(rows, 10) || 0;
+  const setupSeatTotal = setupC * setupR;
+  const setupTop = parseInt(maxNum, 10) > 0 ? parseInt(maxNum, 10) : setupSeatTotal;
+  const setupCount = setupTop - excludedNums.filter((n) => n <= setupTop).length;
+  const templateCount = setupTop > 0 ? setupTop : 30;
+  const previewMarks = (() => {
+    if (dims && dims.cols === setupC && dims.rows === setupR && seats.length) return seats.map((s) => s.status);
+    const st = saved.seatSetup;
+    if (st && st.cols === setupC && st.rows === setupR && st.cells?.length === setupC * setupR)
+      return st.cells.map((v) => (v === 'x' ? 'excluded' : v > 0 ? 'fixed' : 'empty'));
+    return null;
+  })();
+  const previewGaps =
+    pairSize === 'custom' && colGaps.length === Math.max(0, setupC - 1)
+      ? colGaps
+      : presetGaps(setupC || 6, pairSize === 'custom' ? '2' : pairSize);
+
+  const onRosterFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const r = await readRosterFile(file);
+      if (!Object.keys(r).length) {
+        alert('파일에서 번호/이름을 찾지 못했습니다.\n「양식 내려받기」로 받은 파일의 이름 칸에 학생 이름을 적어 다시 올려주세요.');
+        return;
+      }
+      setRoster(r);
+      showToast(`명렬표 ${Object.keys(r).length}명을 불러왔어요.`);
+    } catch {
+      alert('파일을 읽는 중 오류가 발생했습니다.');
+    }
+  };
+
+  const applyRosterNumbers = () => {
+    if (!rosterInfo) return;
+    setMaxNum(String(rosterInfo.max));
+    setExcludedText(formatNumberList(rosterInfo.missing));
+    showToast(
+      `1~${rosterInfo.max}번${rosterInfo.missing.length ? `, 제외 ${formatNumberList(rosterInfo.missing)}` : ''}로 설정했어요.`,
+    );
+  };
+
+  const resetDraw = () => {
+    sound.stopRiser();
+    runRef.current++;
+    skipRef.current = false;
+    busyRef.current = false;
+    setPhase('prepare');
+    setRevealed(new Set());
+    setActiveIdx(null);
+    setRollValue(null);
+    setCountdown(null);
+    setSeats((prev) => prev.map((s) => (s.status === 'empty' ? emptySeat() : s)));
+  };
+
+  const createBoard = () => {
     const c = parseInt(cols, 10);
-    if (isNaN(r) || r <= 0 || isNaN(c) || c <= 0) {
+    const r = parseInt(rows, 10);
+    if (isNaN(c) || c <= 0 || isNaN(r) || r <= 0) {
       alert('가로(분단수)와 세로(줄수)를 올바르게 입력해주세요!');
       return;
     }
-    const total = r * c;
-    if (total > 150) {
+    if (c * r > 150) {
       alert('자리가 너무 많습니다 (최대 150석)');
       return;
     }
-    const initialSeats = Array.from({ length: total }, () => ({
-      status: 'empty',
-      studentNum: null
-    }));
-    setSeats(initialSeats);
-    setRevealedCount(0);
-    setShowPrint(false);
+    let next;
+    const st = saved.seatSetup;
+    if (dims && dims.cols === c && dims.rows === r && seats.length === c * r) {
+      next = seats;
+    } else if (!seats.length && st && st.cols === c && st.rows === r && st.cells?.length === c * r) {
+      next = st.cells.map((v) =>
+        v === 'x' ? { status: 'excluded', studentNum: null } : v > 0 ? { status: 'fixed', studentNum: v } : emptySeat(),
+      );
+    } else {
+      next = Array.from({ length: c * r }, emptySeat);
+    }
+    setSeats(next);
+    setDims({ cols: c, rows: r });
+    setColGaps(
+      pairSize === 'custom' && colGaps.length === c - 1 ? colGaps : presetGaps(c, pairSize === 'custom' ? '2' : pairSize),
+    );
+    setRowGaps(fitArray(rowGaps, r - 1));
+    resetDraw();
     setView('board');
   };
 
-  const handleDrawAll = () => {
-    if (isDrawing || revealedCount === seats.length) return;
-    setIsDrawing(true);
+  const finish = () => {
+    const d = drawRef.current;
+    setRevealed(new Set(d.seats.map((_, i) => i)));
+    setActiveIdx(null);
+    setRollValue(null);
+    setCountdown(null);
+    setPhase('done');
+    sound.fanfare();
+    setConfetti(Date.now());
+  };
 
-    const validSeatsCount = seats.filter(s => s.status !== 'excluded').length;
-    const fixedStudents = seats.filter(s => s.status === 'fixed').map(s => parseInt(s.studentNum, 10));
-
-    const pool = [];
-    for (let i = 1; i <= validSeatsCount; i++) {
-      if (!fixedStudents.includes(i)) pool.push(i);
+  // 한 자리의 번호를 슬롯머신처럼 돌리다가 공개
+  const rollAndReveal = async (idx, alive, rollMs, hold) => {
+    const d = drawRef.current;
+    const target = d.seats[idx].studentNum;
+    setActiveIdx(idx);
+    let t = 0;
+    let step = 28;
+    while (t < rollMs) {
+      if (!alive()) return;
+      if (skipRef.current) break;
+      const rem = d.remaining;
+      setRollValue(rem[Math.floor(Math.random() * rem.length)]);
+      sound.tick(1 + (0.6 * t) / rollMs);
+      await sleep(step);
+      t += step;
+      step = Math.min(step * 1.08, 130);
     }
-
-    const shuffled = shuffleArray(pool);
-    let poolIndex = 0;
-
-    const finalSeats = seats.map(s => {
-      if (s.status === 'empty') {
-        const nextNum = shuffled[poolIndex++];
-        return { ...s, studentNum: nextNum || '?' };
-      }
-      return s;
-    });
-
-    setSeats(finalSeats);
-    setRevealedCount(0);
-
-    let count = 0;
-    const interval = setInterval(() => {
-      count++;
-      setRevealedCount(count);
-      if (count >= seats.length) {
-        clearInterval(interval);
-        setIsDrawing(false);
-      }
-    }, 200);
+    if (hold && alive() && !skipRef.current) {
+      setRollValue('?');
+      sound.heartbeat();
+      await sleep(hold);
+    }
+    if (!alive()) return;
+    d.remaining = d.remaining.filter((n) => n !== target);
+    setRollValue(null);
+    setActiveIdx(null);
+    setRevealed((prev) => new Set(prev).add(idx));
+    sound.ding();
   };
 
-  const resetSwapState = () => {
-    setSwapMode(false);
-    setSwapFrom(null);
-    setSwapHistory([]);
-    setJustSwapped([]);
-  };
-
-  const handleReset = () => {
-    setView('setup');
-    setSeats([]);
-    setRevealedCount(0);
-    setIsDrawing(false);
-    setShowPrint(false);
-    resetSwapState();
-  };
-
-  // ── 자리 바꾸기 ─────────────────────────────────────
-  // 학생 자리 → 다른 학생 자리: 두 학생 자리 교환
-  // 학생 자리 → 빈자리: 그 학생이 빈자리로 이동 (원래 자리는 빈자리가 됨)
-  const toggleSwapMode = () => {
-    setSwapMode(m => !m);
-    setSwapFrom(null);
-  };
-
-  const handleSwapClick = (index) => {
-    if (swapFrom === null) {
-      if (seats[index].status === 'excluded') return; // 첫 선택은 학생 자리만
-      setSwapFrom(index);
+  const startDraw = async () => {
+    if (phase !== 'prepare' && phase !== 'done') return;
+    if (shortage > 0) return;
+    if (!pool.length) {
+      showToast('뽑을 번호가 없어요. 번호 설정을 확인하세요.');
       return;
     }
-    if (swapFrom === index) {
-      setSwapFrom(null); // 같은 자리 다시 누르면 선택 취소
+    const id = ++runRef.current;
+    const alive = () => runRef.current === id;
+    skipRef.current = false;
+    busyRef.current = false;
+    sound.unlock();
+
+    const cfg = SPEEDS[revealMode];
+    const assigned = shuffle(pool);
+    let k = 0;
+    const next = seats.map((s) => (s.status === 'excluded' || s.status === 'fixed' ? s : { status: 'empty', studentNum: assigned[k++] ?? null }));
+    drawRef.current = { seats: next, remaining: [...assigned], cfg };
+    setSeats(next);
+    setRevealed(new Set());
+    setActiveIdx(null);
+    setRollValue(null);
+    setRollPool(assigned);
+
+    // 1) 섞기 + 드럼롤 (점점 빨라짐)
+    setPhase('shuffling');
+    sound.whoosh();
+    sound.startRiser(cfg.shuffle / 1000);
+    const t0 = performance.now();
+    let gap = 120;
+    while (performance.now() - t0 < cfg.shuffle) {
+      if (!alive()) return;
+      if (skipRef.current) break;
+      setFlicker((f) => f + 1);
+      sound.drum(Math.min(1, (performance.now() - t0) / cfg.shuffle));
+      await sleep(gap);
+      gap = Math.max(40, gap * 0.94);
+    }
+    if (!alive()) return;
+    sound.crash();
+
+    // 2) 카운트다운
+    if (cfg.countdown && !skipRef.current) {
+      setPhase('countdown');
+      for (const n of [3, 2, 1]) {
+        if (!alive() || skipRef.current) break;
+        setCountdown(n);
+        sound.beep(false);
+        await sleep(750);
+      }
+      setCountdown(null);
+    }
+    if (!alive()) return;
+
+    // 학생 수보다 자리가 많으면 남는 자리는 바로 빈자리로 공개
+    setRevealed(new Set(next.map((s, i) => (s.status === 'empty' && !s.studentNum ? i : -1)).filter((i) => i >= 0)));
+    if (skipRef.current) {
+      finish();
       return;
     }
-    const newSeats = [...seats];
-    [newSeats[swapFrom], newSeats[index]] = [newSeats[index], newSeats[swapFrom]];
-    setSwapHistory(h => [...h, seats]);
-    setSeats(newSeats);
-    setJustSwapped([swapFrom, index]);
-    setSwapFrom(null);
-    clearTimeout(swapTimerRef.current);
-    swapTimerRef.current = setTimeout(() => setJustSwapped([]), 700);
+
+    // 3) 한 자리씩 공개
+    setPhase('revealing');
+    sound.beep(true);
+    if (revealMode === 'click') return;
+
+    const order = shuffle(next.map((s, i) => (s.status === 'empty' && s.studentNum ? i : -1)).filter((i) => i >= 0));
+    for (let i = 0; i < order.length; i++) {
+      if (!alive()) return;
+      if (skipRef.current) break;
+      const last = i === order.length - 1;
+      await rollAndReveal(order[i], alive, last && revealMode !== 'fast' ? cfg.roll * 1.8 : cfg.roll, cfg.hold + (last && revealMode !== 'fast' ? 400 : 0));
+      if (!alive()) return;
+      if (!skipRef.current) await sleep(cfg.pause);
+    }
+    if (alive()) finish();
   };
 
-  const handleUndoSwap = () => {
-    if (swapHistory.length === 0) return;
-    setSeats(swapHistory[swapHistory.length - 1]);
-    setSwapHistory(h => h.slice(0, -1));
-    setSwapFrom(null);
-    setJustSwapped([]);
+  const revealByClick = async (idx) => {
+    if (busyRef.current) return;
+    const d = drawRef.current;
+    const s = d.seats[idx];
+    if (s.status !== 'empty' || !s.studentNum || revealed.has(idx)) return;
+    busyRef.current = true;
+    const id = runRef.current;
+    const alive = () => runRef.current === id;
+    await rollAndReveal(idx, alive, d.cfg.roll, d.cfg.hold);
+    busyRef.current = false;
+    if (!alive()) return;
+    if (skipRef.current || d.remaining.length === 0) finish();
   };
 
-  const handleDeskClick = (index) => {
-    if (swapMode) handleSwapClick(index);
-    else openModal(index);
+  const revealAll = () => {
+    skipRef.current = true;
+    if (phase === 'revealing' && revealMode === 'click' && !busyRef.current) finish();
   };
 
-  const openModal = (index) => {
-    if (isDrawing || revealedCount > 0) return;
-    setSelectedDesk(index);
-    setFixedNumInput(seats[index].studentNum || '');
+  const onDeskClick = (i) => {
+    if (phase === 'prepare') {
+      setEditIdx(i);
+      setEditNum(seats[i].status === 'fixed' ? String(seats[i].studentNum) : '');
+    } else if (phase === 'revealing' && revealMode === 'click') {
+      revealByClick(i);
+    }
   };
 
-  const updateSeatStatus = (status) => {
-    if (selectedDesk === null) return;
-    const newSeats = [...seats];
-    let num = null;
+  const applyEdit = (status) => {
+    if (editIdx === null) return;
+    let n = null;
     if (status === 'fixed') {
-      num = parseInt(fixedNumInput, 10);
-      if (isNaN(num) || num <= 0) {
+      n = parseInt(editNum, 10);
+      if (isNaN(n) || n <= 0) {
         alert('올바른 학생 번호를 입력하세요.');
         return;
       }
+      if (seats.some((s, i) => i !== editIdx && s.status === 'fixed' && s.studentNum === n)) {
+        alert(`${n}번은 이미 다른 자리에 고정되어 있어요.`);
+        return;
+      }
+      if (excludedSet.has(n)) {
+        alert(`${n}번은 제외할 번호(전출 등)로 설정되어 있어요.`);
+        return;
+      }
     }
-    newSeats[selectedDesk] = { status, studentNum: num };
-    setSeats(newSeats);
-    setSelectedDesk(null);
+    const next = [...seats];
+    next[editIdx] = { status, studentNum: n };
+    setSeats(next);
+    setEditIdx(null);
   };
 
+  const toggleColGap = (i) => {
+    setColGaps((g) => g.map((v, j) => (j === i ? !v : v)));
+    setPairSize('custom');
+  };
+  const toggleRowGap = (i) => setRowGaps((g) => g.map((v, j) => (j === i ? !v : v)));
+
+  const toastEl = toast && (
+    <div className="toast no-print" key={toast.id}>
+      {toast.msg}
+    </div>
+  );
+
+  // ───────────────────────── 설정 화면 ─────────────────────────
   if (view === 'setup') {
     return (
       <div className="app-container">
         <div className="setup-view">
           <h1 className="setup-title">우리반 자리배치표</h1>
+          <div className="setup-top">
           <div className="input-group">
             <div className="input-wrapper">
               <label className="input-label">가로 (분단 수)</label>
@@ -457,8 +498,10 @@ function App() {
                 placeholder="예: 6"
                 value={cols}
                 onChange={(e) => setCols(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleStart()}
-                min="1" max="20" autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && createBoard()}
+                min="1"
+                max="20"
+                autoFocus
               />
             </div>
             <span className="multiply-sign">×</span>
@@ -470,134 +513,354 @@ function App() {
                 placeholder="예: 5"
                 value={rows}
                 onChange={(e) => setRows(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleStart()}
-                min="1" max="20"
+                onKeyDown={(e) => e.key === 'Enter' && createBoard()}
+                min="1"
+                max="20"
               />
             </div>
           </div>
-          <button className="start-btn" onClick={handleStart}>
+          <LayoutPreview
+            cols={setupC}
+            rows={setupR}
+            colGaps={previewGaps}
+            rowGaps={fitArray(rowGaps, setupR - 1)}
+            marks={previewMarks}
+          />
+          </div>
+
+          <div className="setup-cards">
+            <section className="setup-card">
+              <h2>
+                <Icon name="pin" /> 뽑을 번호
+              </h2>
+              <div className="setup-row">
+                <span>1번 ~</span>
+                <input
+                  type="number"
+                  className="mini-input"
+                  min="1"
+                  max="999"
+                  placeholder={setupSeatTotal || '자동'}
+                  value={maxNum}
+                  onChange={(e) => setMaxNum(e.target.value)}
+                />
+                <span>번</span>
+              </div>
+              <p className="setup-help">전학 온 학생이 있으면 마지막 번호를 늘려주세요. 비워두면 자리 수만큼 뽑아요.</p>
+              <label className="setup-label" htmlFor="excluded-input">
+                제외할 번호 (전출 등)
+              </label>
+              <input
+                id="excluded-input"
+                className="text-input"
+                placeholder="예: 7, 13  (범위는 20-22)"
+                value={excludedText}
+                onChange={(e) => setExcludedText(e.target.value)}
+              />
+              {setupSeatTotal > 0 && (
+                <div className={`summary ${setupCount > setupSeatTotal ? 'warn' : ''}`}>
+                  1~{setupTop}번 중 <b>{setupCount}명</b>을 뽑아요
+                  {excludedNums.length > 0 && <> (제외: {formatNumberList(excludedNums)})</>}
+                  <br />
+                  자리 {setupSeatTotal}석
+                  {setupCount > setupSeatTotal
+                    ? ` → ${setupCount - setupSeatTotal}석이 부족해요`
+                    : setupCount < setupSeatTotal
+                      ? ` → ${setupSeatTotal - setupCount}석은 빈자리 (자리판에서 빼도 돼요)`
+                      : ' → 딱 맞아요 ✓'}
+                </div>
+              )}
+            </section>
+
+            <section className="setup-card">
+              <h2>
+                <Icon name="view_column" /> 짝 / 통로
+              </h2>
+              <div className="seg">
+                {PAIR_PRESETS.map((p) => (
+                  <button key={p.v} className={pairSize === p.v ? 'on' : ''} onClick={() => setPairSize(p.v)}>
+                    {p.label}
+                  </button>
+                ))}
+                {pairSize === 'custom' && <button className="on">직접 설정</button>}
+              </div>
+              <p className="setup-help">
+                자리판에서 책상 사이를 누르면 붙임 ↔ 통로를 하나씩 바꿀 수 있어요. 줄(행) 사이에도 통로를 넣을 수 있어요.
+              </p>
+            </section>
+
+            <section className="setup-card">
+              <h2>
+                <Icon name="badge" /> 명렬표 <span className="optional">선택</span>
+              </h2>
+              <p className="setup-help">
+                명렬표를 올리면 뽑은 번호에 이름이 함께 나와요. 올리지 않아도 번호만으로 뽑을 수 있어요.
+              </p>
+              <ol className="roster-steps">
+                <li>양식을 내려받아요 (번호 1~{templateCount}번이 채워져 있어요)</li>
+                <li>이름 칸에 학생 이름을 적어요 (전출 학생은 비워 두기)</li>
+                <li>저장한 파일을 다시 올려요</li>
+              </ol>
+              <div className="setup-row wrap">
+                <button className="pill-btn ghost" onClick={() => downloadRosterTemplate(templateCount, className)}>
+                  <Icon name="download" /> 양식 내려받기
+                </button>
+                <label className="pill-btn">
+                  <Icon name="upload_file" /> {roster ? '다시 올리기' : '엑셀 올리기'}
+                  <input type="file" accept=".xlsx,.xls,.csv" onChange={onRosterFile} hidden />
+                </label>
+                {roster && (
+                  <button className="pill-btn ghost" onClick={() => setRoster(null)}>
+                    <Icon name="delete" /> 명렬표 지우기
+                  </button>
+                )}
+              </div>
+              {rosterInfo && (
+                <div className="roster-info">
+                  <span>
+                    {rosterInfo.count}명 · 1~{rosterInfo.max}번
+                    {rosterInfo.missing.length > 0 && ` · 비어 있는 번호 ${formatNumberList(rosterInfo.missing)}`}
+                  </span>
+                  <button className="link-btn" onClick={applyRosterNumbers}>
+                    명렬표 번호대로 뽑기 설정
+                  </button>
+                </div>
+              )}
+            </section>
+          </div>
+
+          <button className="start-btn" onClick={createBoard}>
             자리판 만들기
           </button>
         </div>
+        {toastEl}
       </div>
     );
   }
 
-  const isPreparing = !isDrawing && revealedCount === 0;
-  const allRevealed = !isDrawing && seats.length > 0 && revealedCount >= seats.length;
+  // ───────────────────────── 자리판 화면 ─────────────────────────
+  const C = dims.cols;
+  const R = dims.rows;
+  const editing = phase === 'prepare';
+  const busy = phase === 'shuffling' || phase === 'countdown' || phase === 'revealing';
+  const drawTotal = drawRef.current ? drawRef.current.seats.filter((s) => s.status === 'empty' && s.studentNum).length : 0;
+  const drawDone = drawRef.current ? drawTotal - drawRef.current.remaining.length : 0;
 
   return (
     <div className="app-container">
       <div className="board-view">
-        <div className="blackboard-texture"></div>
-
+        <div className="blackboard-texture" />
         <div className="board-header">
-          <button className="control-btn" onClick={handleReset} disabled={isDrawing}>
-            <span className="material-symbols-rounded">arrow_back</span> 돌아가기
+          <button
+            className="control-btn"
+            onClick={() => {
+              if (phase === 'done') resetDraw();
+              else {
+                resetDraw();
+                setView('setup');
+              }
+            }}
+            disabled={busy}
+          >
+            <Icon name={phase === 'done' ? 'edit' : 'arrow_back'} /> {phase === 'done' ? '자리 편집' : '돌아가기'}
           </button>
           <div className="teacher-desk">교 탁 (칠판)</div>
           <div className="controls">
-            {allRevealed ? (
-              <>
-                {swapMode && (
-                  <button
-                    className="control-btn"
-                    onClick={handleUndoSwap}
-                    disabled={swapHistory.length === 0}
-                  >
-                    <span className="material-symbols-rounded">undo</span> 되돌리기
-                  </button>
-                )}
-                <button
-                  className={`control-btn swap-btn ${swapMode ? 'active' : ''}`}
-                  onClick={toggleSwapMode}
-                >
-                  <span className="material-symbols-rounded">{swapMode ? 'check' : 'swap_horiz'}</span>
-                  {swapMode ? ' 바꾸기 완료' : ' 자리 바꾸기'}
-                </button>
-                {!swapMode && (
-                  <button className="control-btn success" onClick={() => setShowPrint(true)}>
-                    <span className="material-symbols-rounded">print</span> 인쇄하기
-                  </button>
-                )}
-              </>
-            ) : (
-              <button
-                className="control-btn primary"
-                onClick={handleDrawAll}
-                disabled={isDrawing || revealedCount === seats.length}
-              >
-                <span className="material-symbols-rounded">shuffle</span> 자리 뽑기!
+            {editing && (
+              <button className="control-btn primary draw-btn" onClick={startDraw} disabled={shortage > 0 || !pool.length}>
+                <Icon name="shuffle" /> 자리 뽑기!
               </button>
+            )}
+            {busy &&
+              (phase === 'revealing' && revealMode === 'click' ? (
+                <button className="control-btn" onClick={revealAll}>
+                  <Icon name="visibility" /> 모두 공개
+                </button>
+              ) : (
+                <button className="control-btn" onClick={() => (skipRef.current = true)}>
+                  <Icon name="fast_forward" /> 건너뛰기
+                </button>
+              ))}
+            {phase === 'done' && (
+              <>
+                <button className="control-btn" onClick={startDraw}>
+                  <Icon name="replay" /> 다시 뽑기
+                </button>
+                <button className="control-btn info" onClick={() => setOverlay('display')}>
+                  <Icon name="tv" /> 전자칠판
+                </button>
+                <button className="control-btn success" onClick={() => setOverlay('print')}>
+                  <Icon name="print" /> 인쇄하기
+                </button>
+              </>
             )}
           </div>
         </div>
 
-        {isPreparing && (
-          <p className="hint-text">
-            <span className="material-symbols-rounded" style={{fontSize:'1em',verticalAlign:'middle'}}>touch_app</span> 책상 클릭 → 제외/지정석 설정 가능
+        {editing && (
+          <>
+            <div className="board-toolbar">
+              <span className={`status-chip ${shortage > 0 ? 'warn' : ''}`}>
+                뽑을 번호 {pool.length}명 · 자리 {drawableCount}석
+                {shortage > 0
+                  ? ` — ${shortage}석 부족!`
+                  : drawableCount > pool.length
+                    ? ` (${drawableCount - pool.length}석 빈자리)`
+                    : ' ✓'}
+              </span>
+              <label className="control-btn small tool-select" title="공개 방식">
+                <Icon name="timer" />
+                <select value={revealMode} onChange={(e) => setRevealMode(e.target.value)}>
+                  {Object.entries(SPEEDS).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="control-btn small" onClick={() => setSoundOn((v) => !v)}>
+                <Icon name={soundOn ? 'volume_up' : 'volume_off'} /> {soundOn ? '소리 켬' : '소리 끔'}
+              </button>
+              <label className="control-btn small">
+                <Icon name="badge" /> {roster ? `명렬표 ${rosterInfo.count}명` : '명렬표 (선택)'}
+                <input type="file" accept=".xlsx,.xls,.csv" onChange={onRosterFile} hidden />
+              </label>
+            </div>
+            <p className="hint-text">
+              {shortage > 0 ? (
+                <>
+                  <Icon name="warning" style={{ fontSize: '1em' }} /> 뽑을 번호가 자리보다 많아요. 제외한 책상을 되돌리거나
+                  ‘돌아가기’에서 번호 설정을 확인하세요.
+                </>
+              ) : (
+                <>
+                  <Icon name="touch_app" style={{ fontSize: '1em' }} /> 책상 클릭 → 제외/지정석 설정 · 책상 사이 클릭 →
+                  통로/붙임 전환
+                </>
+              )}
+            </p>
+          </>
+        )}
+        {phase === 'revealing' && (
+          <p className="reveal-status">
+            {revealMode === 'click' ? '반짝이는 책상을 눌러 한 자리씩 공개하세요! ' : '공개 중… '}
+            {drawDone} / {drawTotal}
           </p>
         )}
+        {phase === 'done' && <p className="reveal-status">🎉 자리 배치 완료! 전자칠판 화면으로 띄우거나 인쇄하세요.</p>}
 
-        {swapMode && (
-          <p className="hint-text swap-hint">
-            <span className="material-symbols-rounded" style={{fontSize:'1em',verticalAlign:'middle'}}>swap_horiz</span>{' '}
-            {swapFrom === null
-              ? '옮길 학생의 자리를 누르세요'
-              : `${seats[swapFrom].studentNum}번 선택됨 → 바꿀 학생 자리 또는 빈자리를 누르세요 (다시 누르면 취소)`}
-          </p>
-        )}
-
-        <div className="desk-grid-container">
-          <div
-            className="desk-grid"
-            style={{
-              gridTemplateColumns: `repeat(${cols}, minmax(55px, 1fr))`,
-              width: '100%',
-            }}
-          >
-            {seats.map((seat, index) => (
-              <Desk
-                key={index}
-                seat={seat}
-                isRevealed={index < revealedCount || seat.status === 'fixed'}
-                onClick={() => handleDeskClick(index)}
-                isPreparing={isPreparing}
-                isSwapMode={swapMode}
-                isSelected={swapFrom === index}
-                isJustSwapped={justSwapped.includes(index)}
-              />
-            ))}
+        <div className="board-stage">
+          <div className="desk-grid-container">
+            <div
+              className={`desk-grid ${editing ? 'editing' : ''} ${activeIdx != null ? 'spotlight' : ''}`}
+              style={{
+                gridTemplateColumns: gridTracks(C, colGaps, 'minmax(52px, 1fr)', 'var(--join-w)', 'var(--aisle-w)'),
+                gridTemplateRows: gridTracks(R, rowGaps, 'auto', 'var(--row-h)', 'var(--row-aisle-h)'),
+                width: '100%',
+                // 책상(4:3)이 화면 높이 안에 들어오도록 폭 제한
+                maxWidth: `max(${C * 60}px, calc((100dvh - 300px) * ${((C * 4 * 0.88) / (3 * R)).toFixed(3)}))`,
+                margin: '0 auto',
+              }}
+            >
+              {seats.map((s, i) => {
+                const r = Math.floor(i / C);
+                const c = i % C;
+                const drawable = s.status === 'empty';
+                const isRevealed = s.status === 'fixed' || (s.status !== 'excluded' && revealed.has(i));
+                const active = activeIdx === i;
+                const frontValue = active
+                  ? rollValue
+                  : phase === 'shuffling' && drawable && rollPool.length
+                    ? rollPool[(flicker * 7 + i * 13 + ((flicker * i) % 11)) % rollPool.length]
+                    : null;
+                const pending = phase === 'revealing' && revealMode === 'click' && drawable && !isRevealed && !active;
+                return (
+                  <Desk
+                    key={i}
+                    seat={s}
+                    revealed={isRevealed}
+                    active={active}
+                    frontValue={frontValue}
+                    roster={roster}
+                    clickable={editing || pending}
+                    pending={pending}
+                    shuffling={phase === 'shuffling' && drawable}
+                    joinL={c > 0 && !colGaps[c - 1]}
+                    joinR={c < C - 1 && !colGaps[c]}
+                    onClick={() => onDeskClick(i)}
+                    style={{ gridRow: r * 2 + 1, gridColumn: c * 2 + 1, animationDelay: `${-((i * 37) % 10) * 0.03}s` }}
+                  />
+                );
+              })}
+              {editing &&
+                colGaps.map((g, i) => (
+                  <button
+                    key={`cg${i}`}
+                    className={`gap-strip col ${g ? 'aisle' : 'joined'}`}
+                    style={{ gridColumn: i * 2 + 2, gridRow: '1 / -1' }}
+                    onClick={() => toggleColGap(i)}
+                    title={g ? '통로 → 붙이기' : '붙임 → 통로 만들기'}
+                  >
+                    {g ? <span className="gap-label">통로</span> : <Icon name="link" />}
+                  </button>
+                ))}
+              {/* 줄 사이 띠는 책상 칸마다 따로 그려서 분단 사이 띠와 겹치지 않게 함 */}
+              {editing &&
+                rowGaps.flatMap((g, i) =>
+                  Array.from({ length: C }, (_, c) => (
+                    <button
+                      key={`rg${i}-${c}`}
+                      className={`gap-strip row ${g ? 'aisle' : ''}`}
+                      style={{ gridRow: i * 2 + 2, gridColumn: c * 2 + 1 }}
+                      onClick={() => toggleRowGap(i)}
+                      title={g ? '통로 없애기' : '이 줄 사이에 통로 만들기'}
+                    >
+                      {g && c === Math.floor((C - 1) / 2) && <span className="gap-label">통 로</span>}
+                    </button>
+                  )),
+                )}
+            </div>
           </div>
+          {phase === 'shuffling' && (
+            <div className="stage-banner">
+              <span>두구두구… 섞는 중!</span>
+            </div>
+          )}
+          {phase === 'countdown' && countdown != null && (
+            <div className="stage-banner countdown" key={countdown}>
+              <span>{countdown}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 자리 설정 모달 */}
-      {selectedDesk !== null && (
-        <div className="modal-overlay" onClick={() => setSelectedDesk(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+      {editIdx !== null && (
+        <div className="modal-overlay" onClick={() => setEditIdx(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h2 className="modal-title">자리 설정</h2>
             <input
               type="number"
               className="modal-input"
               placeholder="학생 번호 입력"
-              value={fixedNumInput}
-              onChange={(e) => setFixedNumInput(e.target.value)}
+              value={editNum}
+              onChange={(e) => setEditNum(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && applyEdit('fixed')}
               autoFocus
             />
+            {roster && roster[parseInt(editNum, 10)] && <p className="modal-name-preview">{roster[parseInt(editNum, 10)]}</p>}
             <div className="modal-actions">
-              <button className="modal-btn success" onClick={() => updateSeatStatus('fixed')}>
+              <button className="modal-btn success" onClick={() => applyEdit('fixed')}>
                 이 학생으로 고정하기
               </button>
-              <button className="modal-btn danger" onClick={() => updateSeatStatus('excluded')}>
+              <button className="modal-btn danger" onClick={() => applyEdit('excluded')}>
                 이 자리 제외하기 (빈 자리)
               </button>
-              <button className="modal-btn" onClick={() => updateSeatStatus('empty')}>
+              <button className="modal-btn" onClick={() => applyEdit('empty')}>
                 일반 자리로 초기화
               </button>
               <button
                 className="modal-btn"
-                onClick={() => setSelectedDesk(null)}
+                onClick={() => setEditIdx(null)}
                 style={{ marginTop: '0.5rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.3)' }}
               >
                 취소
@@ -607,17 +870,20 @@ function App() {
         </div>
       )}
 
-      {/* 인쇄 뷰 */}
-      {showPrint && (
-        <PrintView
-          seats={seats}
-          cols={cols}
-          rows={rows}
-          onClose={() => setShowPrint(false)}
+      {overlay && (
+        <ResultOverlay
+          mode={overlay}
+          onClose={() => setOverlay(null)}
+          layout={{ seats, cols: C, rows: R, colGaps, rowGaps }}
+          roster={roster}
+          onRosterFile={onRosterFile}
+          onTemplate={() => downloadRosterTemplate(topNum, className)}
+          className={className}
+          setClassName={setClassName}
         />
       )}
+      <Confetti burst={confetti} />
+      {toastEl}
     </div>
   );
 }
-
-export default App;
