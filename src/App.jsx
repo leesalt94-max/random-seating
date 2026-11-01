@@ -4,7 +4,9 @@ import { readRosterFile, rosterSummary, downloadRosterTemplate } from './roster'
 import { sound } from './sound';
 import ResultOverlay from './ResultOverlay';
 import Confetti from './Confetti';
+import RosterCloud from './RosterCloud';
 import './swap.css';
+import './cloud.css';
 
 const STORE_KEY = 'random-seating:v2';
 
@@ -153,7 +155,11 @@ export default function App() {
   const [rowGaps, setRowGaps] = useState(saved.rowGaps ?? []);
   const [dims, setDims] = useState(null);
   const [seats, setSeats] = useState([]);
-  const [roster, setRoster] = useState(saved.roster ?? null);
+  // 명렬표는 '이 기기에 기억하기'를 켠 경우에만 브라우저에 남긴다 (공용 전자칠판 보호, 기본 꺼짐)
+  const [rememberRoster, setRememberRoster] = useState(saved.rememberRoster === true);
+  const [roster, setRoster] = useState(saved.rememberRoster === true ? (saved.roster ?? null) : null);
+  const [lastCode, setLastCode] = useState(saved.lastCode ?? '');
+  const [cloud, setCloud] = useState(null); // 'upload' | 'download'
   const [className, setClassName] = useState(saved.className ?? '1학년 1반');
   const [revealMode, setRevealMode] = useState(SPEEDS[saved.revealMode] ? saved.revealMode : 'normal');
   const [soundOn, setSoundOn] = useState(saved.soundOn ?? true);
@@ -198,8 +204,23 @@ export default function App() {
             cells: seats.map((s) => (s.status === 'excluded' ? 'x' : s.status === 'fixed' ? s.studentNum : 0)),
           }
         : saved.seatSetup;
-    saveStore({ cols, rows, maxNum, excludedText, pairSize, colGaps, rowGaps, seatSetup, roster, className, revealMode, soundOn });
-  }, [cols, rows, maxNum, excludedText, pairSize, colGaps, rowGaps, dims, seats, roster, className, revealMode, soundOn, saved]);
+    saveStore({
+      cols,
+      rows,
+      maxNum,
+      excludedText,
+      pairSize,
+      colGaps,
+      rowGaps,
+      seatSetup,
+      roster: rememberRoster ? roster : null,
+      rememberRoster,
+      lastCode,
+      className,
+      revealMode,
+      soundOn,
+    });
+  }, [cols, rows, maxNum, excludedText, pairSize, colGaps, rowGaps, dims, seats, roster, rememberRoster, lastCode, className, revealMode, soundOn, saved]);
 
   useEffect(() => {
     if (!toast) return;
@@ -256,6 +277,13 @@ export default function App() {
     } catch {
       alert('파일을 읽는 중 오류가 발생했습니다.');
     }
+  };
+
+  const onCloudLoaded = (r) => {
+    setRoster(r.roster);
+    if (r.className) setClassName(r.className);
+    setCloud(null);
+    showToast(`서버에서 명렬표 ${Object.keys(r.roster).length}명을 불러왔어요.`);
   };
 
   const applyRosterNumbers = () => {
@@ -693,6 +721,36 @@ export default function App() {
                   </button>
                 </div>
               )}
+
+              <div className="cloud-box">
+                <div className="cloud-title">
+                  <Icon name="shield_lock" /> 서버 보관 <span className="optional">선택</span>
+                </div>
+                <p className="setup-help">
+                  비밀번호로 암호화해 서버에 보관하면, 다른 기기(전자칠판 등)에서 코드와 비밀번호로 불러올 수 있어요.
+                </p>
+                <div className="setup-row wrap">
+                  <button
+                    className="pill-btn ghost"
+                    onClick={() => setCloud('upload')}
+                    disabled={!roster}
+                    title={roster ? '' : '먼저 명렬표를 올려 주세요'}
+                  >
+                    <Icon name="cloud_upload" /> 서버에 보관
+                  </button>
+                  <button className="pill-btn ghost" onClick={() => setCloud('download')}>
+                    <Icon name="cloud_download" /> 서버에서 불러오기
+                  </button>
+                </div>
+              </div>
+
+              <label className="remember-row">
+                <input type="checkbox" checked={rememberRoster} onChange={(e) => setRememberRoster(e.target.checked)} />
+                <span>
+                  이 기기에 명렬표 기억하기
+                  <small>개인 기기에서만 켜세요. 끄면 창을 닫을 때 이름이 남지 않아요.</small>
+                </span>
+              </label>
             </section>
           </div>
 
@@ -700,6 +758,17 @@ export default function App() {
             자리판 만들기
           </button>
         </div>
+        {cloud && (
+          <RosterCloud
+            mode={cloud}
+            roster={roster}
+            className={className}
+            lastCode={lastCode}
+            onCode={setLastCode}
+            onLoaded={onCloudLoaded}
+            onClose={() => setCloud(null)}
+          />
+        )}
         {toastEl}
       </div>
     );
@@ -811,6 +880,9 @@ export default function App() {
                 <Icon name="badge" /> {roster ? `명렬표 ${rosterInfo.count}명` : '명렬표 (선택)'}
                 <input type="file" accept=".xlsx,.xls,.csv" onChange={onRosterFile} hidden />
               </label>
+              <button className="control-btn small" onClick={() => setCloud('download')} title="서버에서 명렬표 불러오기">
+                <Icon name="cloud_download" /> 서버 명렬표
+              </button>
             </div>
             <p className="hint-text">
               {shortage > 0 ? (
@@ -981,6 +1053,17 @@ export default function App() {
           onTemplate={() => downloadRosterTemplate(topNum, className)}
           className={className}
           setClassName={setClassName}
+        />
+      )}
+      {cloud && (
+        <RosterCloud
+          mode={cloud}
+          roster={roster}
+          className={className}
+          lastCode={lastCode}
+          onCode={setLastCode}
+          onLoaded={onCloudLoaded}
+          onClose={() => setCloud(null)}
         />
       )}
       <Confetti burst={confetti} />

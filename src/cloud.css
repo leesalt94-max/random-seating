@@ -1,0 +1,173 @@
+/* ===================================== */
+/*   명렬표 서버 보관 (암호화)             */
+/* ===================================== */
+
+.cloud-box {
+  margin-top: 0.4rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.cloud-title {
+  color: var(--chalk-yellow);
+  font-size: 1.05rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.pill-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.remember-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: var(--chalk-white);
+  margin-top: 0.2rem;
+}
+.remember-row input {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.15rem;
+  accent-color: var(--chalk-yellow);
+  flex-shrink: 0;
+}
+.remember-row small {
+  display: block;
+  opacity: 0.65;
+  font-size: 0.8rem;
+  margin-top: 0.1rem;
+}
+
+/* 모달 */
+.modal-content.rc-modal {
+  width: min(440px, 94vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  max-height: 92dvh;
+  overflow-y: auto;
+}
+.rc-modal .modal-title {
+  margin-bottom: 0.2rem;
+  font-size: clamp(1.2rem, 4.5vw, 1.6rem);
+}
+.rc-modal .modal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+.rc-modal .modal-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.rc-sub {
+  color: var(--chalk-white);
+  opacity: 0.85;
+}
+.rc-input {
+  margin-bottom: 0 !important;
+  font-size: clamp(1.05rem, 4vw, 1.3rem) !important;
+  font-family: 'Outfit', 'Jua', sans-serif !important;
+}
+.rc-code-input {
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.rc-pw-row {
+  position: relative;
+}
+.rc-pw-row .rc-input {
+  padding-right: 2.6rem;
+}
+.rc-eye {
+  position: absolute;
+  right: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--chalk-white);
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 0.3rem;
+}
+.rc-eye:hover {
+  opacity: 1;
+}
+.rc-info {
+  display: flex;
+  gap: 0.5rem;
+  text-align: left;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: #b9fbd7;
+  background: rgba(105, 240, 174, 0.08);
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+}
+.rc-agree {
+  display: flex;
+  gap: 0.5rem;
+  text-align: left;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--chalk-white);
+  cursor: pointer;
+}
+.rc-agree input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.1rem;
+  accent-color: var(--chalk-yellow);
+  flex-shrink: 0;
+}
+.rc-error {
+  color: #1b1b1b;
+  background: var(--chalk-red, #ff8a80);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.92rem;
+  text-align: left;
+}
+.rc-done {
+  color: #b9fbd7;
+  font-size: 1.05rem;
+}
+.rc-code {
+  font-family: 'Outfit', monospace;
+  font-weight: 800;
+  font-size: clamp(2rem, 9vw, 2.8rem);
+  letter-spacing: 0.12em;
+  color: var(--wood-dark);
+  background: var(--chalk-yellow);
+  border-radius: 10px;
+  padding: 0.4rem 0.6rem;
+  user-select: all;
+}
+.rc-notes {
+  text-align: left;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--chalk-white);
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.rc-delete {
+  align-self: center;
+  font-size: 0.85rem;
+  opacity: 0.8;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
