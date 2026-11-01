@@ -256,21 +256,29 @@ function PrintView({ seats, cols, onClose }) {
 // ========================
 //    DESK COMPONENT
 // ========================
-function Desk({ seat, isRevealed, onClick, isPreparing }) {
+function Desk({ seat, isRevealed, onClick, isPreparing, isSwapMode, isSelected, isJustSwapped }) {
   const { status, studentNum } = seat;
+  const isClickable = isPreparing || isSwapMode;
   const classes = [
     'desk-wrapper',
     isRevealed ? 'flipped' : '',
     status === 'excluded' ? 'excluded' : '',
     status === 'fixed' ? 'fixed' : '',
-    isPreparing ? 'clickable' : ''
+    isClickable ? 'clickable' : '',
+    isSwapMode ? 'swap-mode' : '',
+    isSelected ? 'swap-selected' : '',
+    isJustSwapped ? 'just-swapped' : ''
   ].filter(Boolean).join(' ');
 
   return (
-    <div className={classes} onClick={isPreparing ? onClick : undefined}>
+    <div className={classes} onClick={isClickable ? onClick : undefined}>
       <div className="desk-inner">
         <div className="desk-front"></div>
-        <div className="desk-back">{status === 'excluded' ? '' : studentNum}</div>
+        <div className="desk-back">
+          {status === 'excluded'
+            ? (isSwapMode ? <span className="desk-empty-label">빈자리</span> : '')
+            : studentNum}
+        </div>
       </div>
     </div>
   );
@@ -289,6 +297,12 @@ function App() {
   const [selectedDesk, setSelectedDesk] = useState(null);
   const [fixedNumInput, setFixedNumInput] = useState('');
   const [showPrint, setShowPrint] = useState(false);
+  // 자리 바꾸기 (배치 완료 후)
+  const [swapMode, setSwapMode] = useState(false);
+  const [swapFrom, setSwapFrom] = useState(null);
+  const [swapHistory, setSwapHistory] = useState([]);
+  const [justSwapped, setJustSwapped] = useState([]);
+  const swapTimerRef = useRef(null);
 
   // Initialize board
   const handleStart = () => {
@@ -350,12 +364,61 @@ function App() {
     }, 200);
   };
 
+  const resetSwapState = () => {
+    setSwapMode(false);
+    setSwapFrom(null);
+    setSwapHistory([]);
+    setJustSwapped([]);
+  };
+
   const handleReset = () => {
     setView('setup');
     setSeats([]);
     setRevealedCount(0);
     setIsDrawing(false);
     setShowPrint(false);
+    resetSwapState();
+  };
+
+  // ── 자리 바꾸기 ─────────────────────────────────────
+  // 학생 자리 → 다른 학생 자리: 두 학생 자리 교환
+  // 학생 자리 → 빈자리: 그 학생이 빈자리로 이동 (원래 자리는 빈자리가 됨)
+  const toggleSwapMode = () => {
+    setSwapMode(m => !m);
+    setSwapFrom(null);
+  };
+
+  const handleSwapClick = (index) => {
+    if (swapFrom === null) {
+      if (seats[index].status === 'excluded') return; // 첫 선택은 학생 자리만
+      setSwapFrom(index);
+      return;
+    }
+    if (swapFrom === index) {
+      setSwapFrom(null); // 같은 자리 다시 누르면 선택 취소
+      return;
+    }
+    const newSeats = [...seats];
+    [newSeats[swapFrom], newSeats[index]] = [newSeats[index], newSeats[swapFrom]];
+    setSwapHistory(h => [...h, seats]);
+    setSeats(newSeats);
+    setJustSwapped([swapFrom, index]);
+    setSwapFrom(null);
+    clearTimeout(swapTimerRef.current);
+    swapTimerRef.current = setTimeout(() => setJustSwapped([]), 700);
+  };
+
+  const handleUndoSwap = () => {
+    if (swapHistory.length === 0) return;
+    setSeats(swapHistory[swapHistory.length - 1]);
+    setSwapHistory(h => h.slice(0, -1));
+    setSwapFrom(null);
+    setJustSwapped([]);
+  };
+
+  const handleDeskClick = (index) => {
+    if (swapMode) handleSwapClick(index);
+    else openModal(index);
   };
 
   const openModal = (index) => {
@@ -435,9 +498,29 @@ function App() {
           <div className="teacher-desk">교 탁 (칠판)</div>
           <div className="controls">
             {allRevealed ? (
-              <button className="control-btn success" onClick={() => setShowPrint(true)}>
-                <span className="material-symbols-rounded">print</span> 인쇄하기
-              </button>
+              <>
+                {swapMode && (
+                  <button
+                    className="control-btn"
+                    onClick={handleUndoSwap}
+                    disabled={swapHistory.length === 0}
+                  >
+                    <span className="material-symbols-rounded">undo</span> 되돌리기
+                  </button>
+                )}
+                <button
+                  className={`control-btn swap-btn ${swapMode ? 'active' : ''}`}
+                  onClick={toggleSwapMode}
+                >
+                  <span className="material-symbols-rounded">{swapMode ? 'check' : 'swap_horiz'}</span>
+                  {swapMode ? ' 바꾸기 완료' : ' 자리 바꾸기'}
+                </button>
+                {!swapMode && (
+                  <button className="control-btn success" onClick={() => setShowPrint(true)}>
+                    <span className="material-symbols-rounded">print</span> 인쇄하기
+                  </button>
+                )}
+              </>
             ) : (
               <button
                 className="control-btn primary"
@@ -456,6 +539,15 @@ function App() {
           </p>
         )}
 
+        {swapMode && (
+          <p className="hint-text swap-hint">
+            <span className="material-symbols-rounded" style={{fontSize:'1em',verticalAlign:'middle'}}>swap_horiz</span>{' '}
+            {swapFrom === null
+              ? '옮길 학생의 자리를 누르세요'
+              : `${seats[swapFrom].studentNum}번 선택됨 → 바꿀 학생 자리 또는 빈자리를 누르세요 (다시 누르면 취소)`}
+          </p>
+        )}
+
         <div className="desk-grid-container">
           <div
             className="desk-grid"
@@ -469,8 +561,11 @@ function App() {
                 key={index}
                 seat={seat}
                 isRevealed={index < revealedCount || seat.status === 'fixed'}
-                onClick={() => openModal(index)}
+                onClick={() => handleDeskClick(index)}
                 isPreparing={isPreparing}
+                isSwapMode={swapMode}
+                isSelected={swapFrom === index}
+                isJustSwapped={justSwapped.includes(index)}
               />
             ))}
           </div>
