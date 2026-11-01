@@ -1,0 +1,75 @@
+/* ===================================== */
+/*   자리 바꾸기 모드 (배치 완료 후)       */
+/* ===================================== */
+
+.controls {
+  flex-wrap: wrap;
+}
+
+.control-btn.swap-btn {
+  border-color: var(--chalk-yellow, #f8e176);
+  color: var(--chalk-yellow, #f8e176);
+}
+.control-btn.swap-btn.active {
+  background: var(--chalk-yellow, #f8e176);
+  color: var(--wood-dark, #3e2723);
+  border-color: transparent;
+  font-weight: bold;
+}
+
+.reveal-status.swap-hint {
+  color: var(--chalk-yellow, #f8e176);
+  font-weight: bold;
+}
+
+/* 바꾸기 모드에서는 빈자리(제외한 자리)도 눌러서 학생을 옮길 수 있음 */
+.desk-wrapper.swap-mode.excluded {
+  opacity: 0.75 !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+}
+.desk-wrapper.swap-mode.excluded .desk-back {
+  background: transparent;
+  border: 3px dashed rgba(255, 255, 255, 0.55);
+  box-shadow: none;
+  color: var(--chalk-white, #f5f5f5);
+}
+
+.desk-wrapper.swap-mode {
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.desk-wrapper.swap-mode:hover {
+  transform: scale(1.04);
+}
+.desk-wrapper.swap-mode:hover .desk-back {
+  border-color: #69f0ae;
+}
+
+/* 선택한 자리 */
+.desk-wrapper.swap-selected {
+  transform: scale(1.08);
+  z-index: 3;
+}
+.desk-wrapper.swap-selected .desk-back {
+  background: var(--chalk-yellow, #f8e176);
+  border-color: #ff8a65;
+  animation: swap-pulse 1s ease-in-out infinite;
+}
+.desk-wrapper.swap-mode.excluded.swap-selected {
+  opacity: 1 !important;
+}
+
+@keyframes swap-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(255, 138, 101, 0.6), 0 6px 14px rgba(0, 0, 0, 0.4); }
+  50%      { box-shadow: 0 0 0 9px rgba(255, 138, 101, 0.2), 0 6px 14px rgba(0, 0, 0, 0.4); }
+}
+
+/* 방금 바뀐 두 자리 반짝임 */
+.desk-wrapper.just-swapped .desk-back {
+  animation: swap-pop 0.65s ease-out;
+}
+@keyframes swap-pop {
+  0%   { background: #69f0ae; }
+  100% { background: var(--chalk-white, #f5f5f5); }
+}

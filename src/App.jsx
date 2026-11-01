@@ -4,6 +4,7 @@ import { readRosterFile, rosterSummary, downloadRosterTemplate } from './roster'
 import { sound } from './sound';
 import ResultOverlay from './ResultOverlay';
 import Confetti from './Confetti';
+import './swap.css';
 
 const STORE_KEY = 'random-seating:v2';
 
@@ -48,7 +49,7 @@ function Icon({ name, style }) {
   );
 }
 
-function Desk({ seat, revealed, active, frontValue, roster, clickable, pending, shuffling, joinL, joinR, onClick, style }) {
+function Desk({ seat, revealed, active, frontValue, roster, clickable, pending, shuffling, joinL, joinR, onClick, style, swapMode, swapSelected, justSwapped }) {
   const { status, studentNum } = seat;
   const backName = studentNum && roster ? roster[studentNum] : null;
   const cls = [
@@ -63,6 +64,9 @@ function Desk({ seat, revealed, active, frontValue, roster, clickable, pending, 
     joinL ? 'join-l' : '',
     joinR ? 'join-r' : '',
     frontValue != null ? 'rolling' : '',
+    swapMode ? 'swap-mode' : '',
+    swapSelected ? 'swap-selected' : '',
+    justSwapped ? 'just-swapped' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -79,7 +83,9 @@ function Desk({ seat, revealed, active, frontValue, roster, clickable, pending, 
           )}
         </div>
         <div className={`desk-back ${backName ? 'has-name' : ''}`}>
-          {status === 'excluded' ? null : studentNum ? (
+          {status === 'excluded' ? (
+            swapMode ? <span className="back-empty">빈자리</span> : null
+          ) : studentNum ? (
             <>
               <span className="back-num">{studentNum}</span>
               {backName && <span className="back-name">{backName}</span>}
@@ -166,6 +172,13 @@ export default function App() {
   const [overlay, setOverlay] = useState(null);
   const [confetti, setConfetti] = useState(0);
   const [toast, setToast] = useState(null);
+
+  // 자리 바꾸기 (배치 완료 후)
+  const [swapMode, setSwapMode] = useState(false);
+  const [swapFrom, setSwapFrom] = useState(null);
+  const [swapHistory, setSwapHistory] = useState([]);
+  const [justSwapped, setJustSwapped] = useState([]);
+  const swapTimerRef = useRef(null);
 
   const runRef = useRef(0);
   const skipRef = useRef(false);
@@ -254,7 +267,58 @@ export default function App() {
     );
   };
 
+  const clearSwap = () => {
+    setSwapMode(false);
+    setSwapFrom(null);
+    setSwapHistory([]);
+    setJustSwapped([]);
+  };
+
+  // ── 자리 바꾸기 ──
+  // 학생 → 학생: 두 학생 자리 교환 / 학생 → 빈자리: 그 자리로 이동
+  const seatLabel = (s) => {
+    if (!s?.studentNum) return '빈자리';
+    const name = roster?.[s.studentNum];
+    return name ? `${s.studentNum}번 ${name}` : `${s.studentNum}번`;
+  };
+
+  const onSwapClick = (i) => {
+    const s = seats[i];
+    if (swapFrom === null) {
+      if (!s.studentNum) return; // 첫 선택은 학생이 앉은 자리만
+      sound.tick?.(1.2);
+      setSwapFrom(i);
+      return;
+    }
+    if (swapFrom === i) {
+      setSwapFrom(null);
+      return;
+    }
+    const next = [...seats];
+    [next[swapFrom], next[i]] = [next[i], next[swapFrom]];
+    const a = seats[swapFrom];
+    setSwapHistory((h) => [...h, seats]);
+    setSeats(next);
+    setJustSwapped([swapFrom, i]);
+    setSwapFrom(null);
+    sound.ding?.();
+    showToast(
+      s.studentNum ? `${seatLabel(a)} ↔ ${seatLabel(s)} 자리를 바꿨어요.` : `${seatLabel(a)}을(를) 빈자리로 옮겼어요.`,
+    );
+    clearTimeout(swapTimerRef.current);
+    swapTimerRef.current = setTimeout(() => setJustSwapped([]), 700);
+  };
+
+  const undoSwap = () => {
+    if (!swapHistory.length) return;
+    setSeats(swapHistory[swapHistory.length - 1]);
+    setSwapHistory((h) => h.slice(0, -1));
+    setSwapFrom(null);
+    setJustSwapped([]);
+  };
+
   const resetDraw = () => {
+    clearSwap();
     sound.stopRiser();
     runRef.current++;
     skipRef.current = false;
@@ -351,6 +415,7 @@ export default function App() {
     const alive = () => runRef.current === id;
     skipRef.current = false;
     busyRef.current = false;
+    clearSwap();
     sound.unlock();
 
     const cfg = SPEEDS[revealMode];
@@ -438,7 +503,9 @@ export default function App() {
   };
 
   const onDeskClick = (i) => {
-    if (phase === 'prepare') {
+    if (phase === 'done' && swapMode) {
+      onSwapClick(i);
+    } else if (phase === 'prepare') {
       setEditIdx(i);
       setEditNum(seats[i].status === 'fixed' ? String(seats[i].studentNum) : '');
     } else if (phase === 'revealing' && revealMode === 'click') {
@@ -660,7 +727,7 @@ export default function App() {
                 setView('setup');
               }
             }}
-            disabled={busy}
+            disabled={busy || swapMode}
           >
             <Icon name={phase === 'done' ? 'edit' : 'arrow_back'} /> {phase === 'done' ? '자리 편집' : '돌아가기'}
           </button>
@@ -681,8 +748,27 @@ export default function App() {
                   <Icon name="fast_forward" /> 건너뛰기
                 </button>
               ))}
-            {phase === 'done' && (
+            {phase === 'done' && swapMode && (
               <>
+                <button className="control-btn" onClick={undoSwap} disabled={!swapHistory.length}>
+                  <Icon name="undo" /> 되돌리기
+                </button>
+                <button
+                  className="control-btn swap-btn active"
+                  onClick={() => {
+                    setSwapMode(false);
+                    setSwapFrom(null);
+                  }}
+                >
+                  <Icon name="check" /> 바꾸기 완료
+                </button>
+              </>
+            )}
+            {phase === 'done' && !swapMode && (
+              <>
+                <button className="control-btn swap-btn" onClick={() => setSwapMode(true)}>
+                  <Icon name="swap_horiz" /> 자리 바꾸기
+                </button>
                 <button className="control-btn" onClick={startDraw}>
                   <Icon name="replay" /> 다시 뽑기
                 </button>
@@ -747,7 +833,17 @@ export default function App() {
             {drawDone} / {drawTotal}
           </p>
         )}
-        {phase === 'done' && <p className="reveal-status">🎉 자리 배치 완료! 전자칠판 화면으로 띄우거나 인쇄하세요.</p>}
+        {phase === 'done' && !swapMode && (
+          <p className="reveal-status">🎉 자리 배치 완료! 전자칠판 화면으로 띄우거나 인쇄하세요.</p>
+        )}
+        {phase === 'done' && swapMode && (
+          <p className="reveal-status swap-hint">
+            <Icon name="swap_horiz" style={{ fontSize: '1em' }} />{' '}
+            {swapFrom === null
+              ? '옮길 학생의 자리를 누르세요'
+              : `${seatLabel(seats[swapFrom])} 선택됨 → 바꿀 학생 자리나 빈자리를 누르세요 (다시 누르면 취소)`}
+          </p>
+        )}
 
         <div className="board-stage">
           <div className="desk-grid-container">
@@ -766,7 +862,9 @@ export default function App() {
                 const r = Math.floor(i / C);
                 const c = i % C;
                 const drawable = s.status === 'empty';
-                const isRevealed = s.status === 'fixed' || (s.status !== 'excluded' && revealed.has(i));
+                const swapping = phase === 'done' && swapMode;
+                const isRevealed =
+                  s.status === 'fixed' || (s.status !== 'excluded' && revealed.has(i)) || (swapping && s.status === 'excluded');
                 const active = activeIdx === i;
                 const frontValue = active
                   ? rollValue
@@ -782,8 +880,11 @@ export default function App() {
                     active={active}
                     frontValue={frontValue}
                     roster={roster}
-                    clickable={editing || pending}
+                    clickable={editing || pending || swapping}
                     pending={pending}
+                    swapMode={swapping}
+                    swapSelected={swapping && swapFrom === i}
+                    justSwapped={justSwapped.includes(i)}
                     shuffling={phase === 'shuffling' && drawable}
                     joinL={c > 0 && !colGaps[c - 1]}
                     joinR={c < C - 1 && !colGaps[c]}
