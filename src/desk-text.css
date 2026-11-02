@@ -1,0 +1,73 @@
+/* ===================================================== */
+/*  뽑기 화면 책상 글씨: 이름이 있으면 이름을 크고 진하게,   */
+/*  번호는 위에 작게. 크기는 책상 크기(cq 단위)에 맞춤.      */
+/* ===================================================== */
+
+.desk-back,
+.desk-front {
+  container-type: size;
+}
+
+/* ── 공개된 책상 (흰 바탕) ── */
+.desk-back.has-name {
+  gap: 0; /* cq 단위는 컨테이너 자신에게 쓰면 화면 크기 기준이 되므로 간격은 자식 margin으로 */
+}
+.desk-back.has-name .back-num {
+  font-size: clamp(0.7rem, min(15cqi, 22cqh), 1.6rem);
+  font-weight: 700;
+  color: #6d4c41;
+  letter-spacing: 0;
+}
+.desk-back.has-name .back-name {
+  /* 3글자 기준으로 책상 폭을 채우고, 더 긴 이름은 글자 수만큼 줄임 */
+  font-size: max(0.8rem, min(calc(78cqi / max(var(--len, 3), 3)), 42cqh));
+  font-weight: 800;
+  color: #1f1410;
+  line-height: 1.05;
+  white-space: nowrap;
+  margin-top: 3cqh;
+}
+.desk-back:not(.has-name) .back-num {
+  font-size: min(48cqi, 62cqh);
+}
+
+/* 고정석(★)은 번호 색으로 구분 */
+.desk-wrapper.fixed .desk-back.has-name .back-num {
+  color: #c77800;
+}
+
+/* ── 돌아가는 번호 (어두운 책상) ── */
+.desk-front .roll {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4cqh;
+  line-height: 1.05;
+}
+.desk-front .roll .roll-num {
+  font-size: min(44cqi, 58cqh);
+  color: var(--chalk-yellow);
+  font-weight: 800;
+}
+.desk-front .roll.has-name .roll-num {
+  font-size: clamp(0.7rem, min(15cqi, 22cqh), 1.6rem);
+  font-weight: 700;
+  color: var(--chalk-yellow);
+}
+.desk-front .roll .roll-name {
+  font-size: max(0.8rem, min(calc(78cqi / max(var(--len, 3), 3)), 42cqh));
+  font-weight: 800;
+  color: #ffffff;
+  opacity: 1;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.desk-wrapper.active .roll.has-name .roll-num {
+  font-size: clamp(0.75rem, min(17cqi, 24cqh), 1.8rem);
+}
+.desk-wrapper.shuffling .desk-front .roll .roll-num {
+  color: #ffffffb3;
+}
+.desk-wrapper.shuffling .desk-front .roll .roll-name {
+  color: rgba(255, 255, 255, 0.85);
+}

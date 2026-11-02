@@ -7,6 +7,8 @@ import Confetti from './Confetti';
 import RosterCloud from './RosterCloud';
 import './swap.css';
 import './cloud.css';
+import './desk-text.css';
+import './screens.css';
 
 const STORE_KEY = 'random-seating:v2';
 
@@ -54,6 +56,7 @@ function Icon({ name, style }) {
 function Desk({ seat, revealed, active, frontValue, roster, clickable, pending, shuffling, joinL, joinR, onClick, style, swapMode, swapSelected, justSwapped }) {
   const { status, studentNum } = seat;
   const backName = studentNum && roster ? roster[studentNum] : null;
+  const rollName = frontValue != null && roster ? roster[frontValue] : null;
   const cls = [
     'desk-wrapper',
     revealed ? 'flipped' : '',
@@ -78,9 +81,13 @@ function Desk({ seat, revealed, active, frontValue, roster, clickable, pending, 
       <div className="desk-inner">
         <div className="desk-front">
           {frontValue != null && (
-            <span className="roll">
-              <span className="roll-num">{frontValue}</span>
-              {roster?.[frontValue] && <span className="roll-name">{roster[frontValue]}</span>}
+            <span className={`roll ${rollName ? 'has-name' : ''}`}>
+              <span className="roll-num">{rollName ? `${frontValue}번` : frontValue}</span>
+              {rollName && (
+                <span className="roll-name" style={{ '--len': rollName.length }}>
+                  {rollName}
+                </span>
+              )}
             </span>
           )}
         </div>
@@ -89,8 +96,12 @@ function Desk({ seat, revealed, active, frontValue, roster, clickable, pending, 
             swapMode ? <span className="back-empty">빈자리</span> : null
           ) : studentNum ? (
             <>
-              <span className="back-num">{studentNum}</span>
-              {backName && <span className="back-name">{backName}</span>}
+              <span className="back-num">{backName ? `${studentNum}번` : studentNum}</span>
+              {backName && (
+                <span className="back-name" style={{ '--len': backName.length }}>
+                  {backName}
+                </span>
+              )}
             </>
           ) : (
             <span className="back-empty">빈자리</span>
@@ -922,11 +933,11 @@ export default function App() {
             <div
               className={`desk-grid ${editing ? 'editing' : ''} ${activeIdx != null ? 'spotlight' : ''}`}
               style={{
-                gridTemplateColumns: gridTracks(C, colGaps, 'minmax(52px, 1fr)', 'var(--join-w)', 'var(--aisle-w)'),
+                gridTemplateColumns: gridTracks(C, colGaps, 'minmax(min(52px, 10.5vw), 1fr)', 'var(--join-w)', 'var(--aisle-w)'),
                 gridTemplateRows: gridTracks(R, rowGaps, 'auto', 'var(--row-h)', 'var(--row-aisle-h)'),
                 width: '100%',
                 // 책상(4:3)이 화면 높이 안에 들어오도록 폭 제한
-                maxWidth: `max(${C * 60}px, calc((100dvh - 300px) * ${((C * 4 * 0.88) / (3 * R)).toFixed(3)}))`,
+                maxWidth: `max(min(${C * 60}px, 100%), calc((100dvh - 18.75rem) * ${((C * 4 * 0.88) / (3 * R)).toFixed(3)}))`,
                 margin: '0 auto',
               }}
             >
@@ -1051,6 +1062,7 @@ export default function App() {
           roster={roster}
           onRosterFile={onRosterFile}
           onTemplate={() => downloadRosterTemplate(topNum, className)}
+          onCloud={setCloud}
           className={className}
           setClassName={setClassName}
         />

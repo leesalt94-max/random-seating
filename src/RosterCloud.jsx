@@ -234,7 +234,7 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
   }
 
   return (
-    <div className="modal-overlay" onClick={close}>
+    <div className="modal-overlay rc-overlay" onClick={close}>
       <div className="modal-content rc-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <h2 className="modal-title">
           <Icon name={mode === 'upload' ? 'cloud_upload' : 'cloud_download'} />{' '}

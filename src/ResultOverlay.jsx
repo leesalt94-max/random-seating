@@ -30,7 +30,60 @@ function ViewToggle({ teacherView, setTeacherView }) {
 }
 
 // mode: 'print' (인쇄/이미지 저장) | 'display' (전자칠판 전체 화면)
-export default function ResultOverlay({ mode, onClose, layout, roster, onRosterFile, onTemplate, className, setClassName }) {
+// 명렬표 메뉴: 엑셀 올리기 · 서버에서 불러오기 · 서버에 보관 · 양식 내려받기
+function RosterMenu({ roster, onRosterFile, onTemplate, onCloud }) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef(null);
+  const count = roster ? Object.keys(roster).length : 0;
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e) => !boxRef.current?.contains(e.target) && setOpen(false);
+    document.addEventListener('pointerdown', away);
+    return () => document.removeEventListener('pointerdown', away);
+  }, [open]);
+
+  const pick = (fn) => () => {
+    setOpen(false);
+    fn();
+  };
+
+  return (
+    <div className="roster-menu" ref={boxRef}>
+      <button className={`pctrl-btn upload-btn ${open ? 'open' : ''}`} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <Icon name="badge" /> {count ? `명렬표 ${count}명` : '명렬표 (선택)'} <Icon name="expand_more" />
+      </button>
+      {open && (
+        <div className="roster-menu-pop" role="menu">
+          <label className="rm-item" role="menuitem">
+            <Icon name="upload_file" /> {count ? '엑셀 다시 올리기' : '엑셀 올리기'}
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={(e) => {
+                setOpen(false);
+                onRosterFile(e);
+              }}
+              hidden
+            />
+          </label>
+          <button className="rm-item" role="menuitem" onClick={pick(() => onCloud('download'))}>
+            <Icon name="cloud_download" /> 서버에서 불러오기
+          </button>
+          <button className="rm-item" role="menuitem" onClick={pick(() => onCloud('upload'))} disabled={!count}>
+            <Icon name="cloud_upload" /> 서버에 암호화 보관
+          </button>
+          <div className="rm-sep" />
+          <button className="rm-item" role="menuitem" onClick={pick(onTemplate)}>
+            <Icon name="download" /> 엑셀 양식 내려받기
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ResultOverlay({ mode, onClose, layout, roster, onRosterFile, onTemplate, onCloud, className, setClassName }) {
   const [teacherView, setTeacherView] = useState(mode === 'print');
   const [saving, setSaving] = useState(false);
   const [isFull, setIsFull] = useState(false);
@@ -117,13 +170,7 @@ export default function ResultOverlay({ mode, onClose, layout, roster, onRosterF
             onChange={(e) => setClassName(e.target.value)}
             placeholder="반 이름 입력"
           />
-          <label className="pctrl-btn upload-btn">
-            <Icon name="upload_file" /> {roster ? '명렬표 다시 올리기' : '명렬표 올리기 (선택)'}
-            <input type="file" accept=".xlsx,.xls,.csv" onChange={onRosterFile} hidden />
-          </label>
-          <button className="pctrl-btn upload-btn" onClick={onTemplate}>
-            <Icon name="download" /> 양식 내려받기
-          </button>
+          <RosterMenu roster={roster} onRosterFile={onRosterFile} onTemplate={onTemplate} onCloud={onCloud} />
         </div>
         <div className="pctrl-right">
           <ViewToggle teacherView={teacherView} setTeacherView={setTeacherView} />
@@ -145,7 +192,7 @@ export default function ResultOverlay({ mode, onClose, layout, roster, onRosterF
       </div>
       {!roster && (
         <div className="dummy-notice no-print">
-          <Icon name="info" /> 번호만 표시됩니다. 이름도 넣으려면 「양식 내려받기」로 받은 파일에 이름을 적어 「명렬표 올리기」로 올리세요. (선택 사항)
+          <Icon name="info" /> 번호만 표시됩니다. 이름도 넣으려면 위의 「명렬표」에서 엑셀을 올리거나 서버에서 불러오세요. (선택 사항)
         </div>
       )}
       <div className="print-sheet-wrapper">

@@ -48,7 +48,7 @@
 
 /* 모달 */
 .modal-content.rc-modal {
-  width: min(440px, 94vw);
+  width: min(27.5rem, 94vw);
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
@@ -180,4 +180,62 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
+}
+
+/* 서버 모달은 인쇄·전자칠판 화면 위에 뜬다 */
+.modal-overlay.rc-overlay {
+  z-index: 400;
+}
+
+/* 인쇄 화면의 명렬표 메뉴 */
+.roster-menu {
+  position: relative;
+}
+.roster-menu .pctrl-btn.open {
+  outline: 2px solid var(--chalk-yellow);
+}
+.roster-menu-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  min-width: 14.5rem;
+  max-width: calc(100vw - 1rem);
+  background: var(--chalkboard);
+  border: 3px solid var(--wood-light);
+  border-radius: 10px;
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+.rm-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 46px;
+  padding: 0.55rem 0.8rem;
+  background: none;
+  border: none;
+  border-radius: 7px;
+  color: var(--chalk-white);
+  font-family: 'Jua', sans-serif;
+  font-size: 1.05rem;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rm-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--chalk-yellow);
+}
+.rm-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.rm-sep {
+  height: 1px;
+  margin: 0.25rem 0.4rem;
+  background: rgba(255, 255, 255, 0.15);
 }
