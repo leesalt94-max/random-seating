@@ -27,10 +27,50 @@ export function passwordProblem(pw) {
   return null;
 }
 
-// "k7qm 4xpa" → "K7QM-4XPA"
+// ── 불러오기 코드 ──
+// 화면 표기: "26년 11월 1-5반 첫번째"  ↔  서버 키(정규형): "26년11월1-5반#1"
+// 띄어쓰기, "첫 번째"/"첫째"/"1번째", "2026년" 같은 표기 차이는 모두 같은 코드로 본다.
+const ORD = ['첫', '두', '세', '네', '다섯', '여섯', '일곱', '여덟', '아홉', '열',
+  '열한', '열두', '열세', '열네', '열다섯', '열여섯', '열일곱', '열여덟', '열아홉', '스무'];
+const ORD_ALIAS = { 한: 1, 둘: 2, 셋: 3, 넷: 4, 스물: 20 };
+const ORD_WORDS = [...ORD, ...Object.keys(ORD_ALIAS)].sort((a, b) => b.length - a.length);
+const CODE_PARSE = new RegExp(`^(?:20)?(\\d{2})년(\\d{1,2})월(.+?)(\\d{1,2}|${ORD_WORDS.join('|')})(?:번째|번|째)$`);
+export const CODE_EXAMPLE = '26년 11월 1-5반 첫번째';
+
+export const ordinalWord = (n) => (n >= 1 && n <= ORD.length ? ORD[n - 1] : String(n));
+
+// 반 이름 → 코드용 짧은 이름. "1학년 5반" → "1-5반", 그 밖에는 공백·기호만 정리
+export function classLabel(className) {
+  const s = String(className || '').trim();
+  const m = s.match(/(\d+)\s*학년\s*(\d+)\s*반/);
+  if (m) return `${m[1]}-${m[2]}반`;
+  return s.replace(/\s+/g, '').replace(/[^가-힣A-Za-z0-9-]/g, '').slice(0, 20);
+}
+
+export function labelProblem(label) {
+  if (!label) return '코드에 넣을 반 이름을 적어 주세요. (예: 1-5반)';
+  if (!/^[가-힣A-Za-z0-9-]{1,20}$/.test(label)) return '반 이름은 한글·영문·숫자·하이픈(-)으로 20자까지 적어 주세요.';
+  if (/\d$/.test(label)) return '반 이름은 숫자로 끝나지 않게 적어 주세요. (예: 1-5 → 1-5반)';
+  return null;
+}
+
+// 입력 → 정규형 (알아볼 수 없으면 null)
 export function normalizeCode(text) {
-  const s = String(text || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  return s.length === 8 ? `${s.slice(0, 4)}-${s.slice(4)}` : null;
+  const s = String(text || '').replace(/\s+/g, '');
+  const m = s.match(CODE_PARSE);
+  if (!m) return null;
+  const month = parseInt(m[2], 10);
+  const label = m[3];
+  const o = m[4];
+  const n = /^\d+$/.test(o) ? parseInt(o, 10) : ORD.indexOf(o) + 1 || ORD_ALIAS[o];
+  if (month < 1 || month > 12 || !n || n > 50 || labelProblem(label)) return null;
+  return `${m[1]}년${month}월${label}#${n}`;
+}
+
+// 정규형 → 화면 표기
+export function displayCode(canon) {
+  const m = String(canon || '').match(/^(\d{2})년(\d{1,2})월(.+)#(\d+)$/);
+  return m ? `${m[1]}년 ${m[2]}월 ${m[3]} ${ordinalWord(parseInt(m[4], 10))}번째` : String(canon || '');
 }
 
 const b64 = (buf) => {
@@ -85,21 +125,22 @@ async function call(body) {
   return data;
 }
 
-// 명렬표를 암호화해 서버에 보관 → { code, expiresAt }
-export async function uploadRoster(roster, className, password) {
-  const problem = passwordProblem(password);
+// 명렬표를 암호화해 서버에 보관 → { code(화면 표기), expiresAt }
+export async function uploadRoster(roster, className, password, label) {
+  const problem = passwordProblem(password) || labelProblem(label);
   if (problem) throw new ApiError(problem);
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const { aesKey, auth } = await deriveKeys(password, salt);
   const plain = new TextEncoder().encode(JSON.stringify({ v: 1, className, roster, savedAt: Date.now() }));
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: AAD }, aesKey, plain);
-  return call({ action: 'create', salt: b64(salt), iv: b64(iv), ct: b64(ct), verifier: await sha256Hex(auth) });
+  const r = await call({ action: 'create', label, salt: b64(salt), iv: b64(iv), ct: b64(ct), verifier: await sha256Hex(auth) });
+  return { ...r, code: displayCode(r.code) };
 }
 
 async function authFor(code, password) {
   const c = normalizeCode(code);
-  if (!c) throw new ApiError('불러오기 코드는 8자리예요. (예: K7QM-4XPA)');
+  if (!c) throw new ApiError(`불러오기 코드를 알아볼 수 없어요. (예: ${CODE_EXAMPLE})`);
   if (!password) throw new ApiError('비밀번호를 입력해 주세요.');
   const { salt } = await call({ action: 'salt', code: c });
   return { c, ...(await deriveKeys(password, unb64(salt))) };

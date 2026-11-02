@@ -1,5 +1,16 @@
 import { useState } from 'react';
-import { uploadRoster, downloadRoster, deleteRoster, passwordProblem, normalizeCode, MIN_PASSWORD } from './secure';
+import {
+  uploadRoster,
+  downloadRoster,
+  deleteRoster,
+  passwordProblem,
+  normalizeCode,
+  displayCode,
+  classLabel,
+  labelProblem,
+  CODE_EXAMPLE,
+  MIN_PASSWORD,
+} from './secure';
 
 function Icon({ name }) {
   return <span className="material-symbols-rounded">{name}</span>;
@@ -11,6 +22,7 @@ const fmtDate = (ms) =>
 // mode: 'upload' (서버에 보관) | 'download' (서버에서 불러오기)
 export default function RosterCloud({ mode, roster, className, lastCode, onCode, onLoaded, onClose }) {
   const [code, setCode] = useState(lastCode || '');
+  const [label, setLabel] = useState(() => classLabel(className));
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -38,12 +50,12 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
   };
 
   const doUpload = () => {
-    const problem = passwordProblem(pw);
+    const problem = labelProblem(label) || passwordProblem(pw);
     if (problem) return setError(problem);
     if (pw !== pw2) return setError('비밀번호 확인이 일치하지 않아요.');
     if (!agree) return setError('안내 사항을 확인하고 체크해 주세요.');
     run('암호화해서 보관하는 중…', async () => {
-      const r = await uploadRoster(roster, className, pw);
+      const r = await uploadRoster(roster, className, pw, label);
       setPw('');
       setPw2('');
       setResult(r);
@@ -55,20 +67,20 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
     run('불러오는 중…', async () => {
       const r = await downloadRoster(code, pw);
       setPw('');
-      onCode(normalizeCode(code));
+      onCode(displayCode(normalizeCode(code)));
       onLoaded(r);
     });
 
   const doDelete = () => {
     const c = normalizeCode(code);
-    if (!c) return setError('불러오기 코드는 8자리예요. (예: K7QM-4XPA)');
+    if (!c) return setError(`불러오기 코드를 알아볼 수 없어요. (예: ${CODE_EXAMPLE})`);
     if (!pw) return setError('삭제하려면 비밀번호를 입력해 주세요.');
-    if (!window.confirm(`서버에서 ${c} 명렬표를 지울까요?\n지우면 이 코드로 다시 불러올 수 없어요.`)) return;
+    if (!window.confirm(`서버에서 「${displayCode(c)}」 명렬표를 지울까요?\n지우면 이 코드로 다시 불러올 수 없어요.`)) return;
     run('삭제하는 중…', async () => {
       await deleteRoster(c, pw);
       setPw('');
       onCode('');
-      setResult({ deleted: c });
+      setResult({ deleted: displayCode(c) });
     });
   };
 
@@ -124,7 +136,7 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
     body = (
       <>
         <p className="rc-done">
-          <Icon name="delete" /> 서버에서 <b>{result.deleted}</b> 명렬표를 지웠어요.
+          <Icon name="delete" /> 서버에서 「<b>{result.deleted}</b>」 명렬표를 지웠어요.
         </p>
         <button className="modal-btn" onClick={onClose}>
           닫기
@@ -159,8 +171,23 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
     body = (
       <>
         <p className="rc-sub">
-          {className} · 학생 <b>{count}명</b>
+          학생 <b>{count}명</b>
         </p>
+        <label className="rc-field">
+          <span>코드에 들어갈 반 이름</span>
+          <input
+            className="modal-input rc-input"
+            placeholder="예: 1-5반"
+            value={label}
+            onChange={(e) => setLabel(e.target.value.replace(/\s+/g, ''))}
+            maxLength={20}
+            disabled={!!busy}
+          />
+          <small>
+            코드는 「{label && !labelProblem(label) ? displayCode(`${String(new Date().getFullYear()).slice(2)}년${new Date().getMonth() + 1}월${label}#1`) : CODE_EXAMPLE}」처럼
+            만들어져요. 같은 달에 또 보관하면 두번째, 세번째로 이어져요.
+          </small>
+        </label>
         {pwInputs}
         <div className="rc-info">
           <Icon name="shield_lock" />
@@ -186,12 +213,12 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
       <>
         <input
           className="modal-input rc-input rc-code-input"
-          placeholder="불러오기 코드 (예: K7QM-4XPA)"
+          placeholder={`불러오기 코드 (예: ${CODE_EXAMPLE})`}
           value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          onChange={(e) => setCode(e.target.value)}
           autoComplete="off"
           spellCheck={false}
-          maxLength={12}
+          maxLength={40}
           disabled={!!busy}
           autoFocus={!lastCode}
         />

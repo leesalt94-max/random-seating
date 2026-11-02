@@ -10,13 +10,16 @@
 //    get    { code, auth }             → { iv, ct, expiresAt }
 //    delete { code, auth }             → { ok }
 // ─────────────────────────────────────────────────────────────
-import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
-const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O, 1/I/L 제외
-const CODE_RE = /^[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$/;
+// 불러오기 코드: 화면에는 "26년 11월 1-5반 첫번째", 서버 키로는 정규형 "26년11월1-5반#1"
+// (정규화 규칙은 src/secure.js 의 normalizeCode 와 같다)
+const CODE_RE = /^\d{2}년(?:[1-9]|1[0-2])월[가-힣A-Za-z0-9-]{1,20}#(?:[1-9]|[1-4]\d|50)$/;
+const LABEL_RE = /^[가-힣A-Za-z0-9-]{1,20}$/;
+const MAX_ORDINAL = 50;
 const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 const HEX64_RE = /^[0-9a-f]{64}$/;
 const MAX_CT = 120000; // 암호문 최대 길이(base64) ≈ 학생 1000명 분량을 넉넉히 넘음
@@ -63,10 +66,10 @@ function schoolYearEnd(now = Date.now()) {
   return Math.floor((Date.UTC(year, 2, 1) - 9 * 3600 * 1000) / 1000); // 초 단위 (EXAT)
 }
 
-function newCode() {
-  let s = '';
-  for (let i = 0; i < 8; i++) s += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
-  return `${s.slice(0, 4)}-${s.slice(4)}`;
+// 올린 날(한국 시간) 기준 "26년11월" 접두어
+function yearMonthPrefix(now = Date.now()) {
+  const kst = new Date(now + 9 * 3600 * 1000);
+  return `${String(kst.getUTCFullYear() % 100).padStart(2, '0')}년${kst.getUTCMonth() + 1}월`;
 }
 
 function clientIp(req) {
@@ -155,14 +158,20 @@ export default async function handler(req, res) {
       if ((await hit(`create:${ip}`, IP_WINDOW)) > IP_MAX_CREATE) {
         throw new HttpError(429, '짧은 시간에 너무 많이 올렸어요. 10분 뒤에 다시 시도해 주세요.');
       }
+      const label = typeof body.label === 'string' ? body.label.replace(/\s+/g, '') : '';
+      if (!LABEL_RE.test(label) || /\d$/.test(label)) {
+        throw new HttpError(400, '반 이름은 한글·영문·숫자·하이픈(-)으로 20자까지, 숫자로 끝나지 않게 적어 주세요. (예: 1-5반)');
+      }
       const expiresAt = schoolYearEnd();
       const record = JSON.stringify({ v: 1, salt, iv, ct, verifier, createdAt: Date.now(), expiresAt: expiresAt * 1000 });
-      for (let i = 0; i < 5; i++) {
-        const code = newCode();
+      const prefix = `${yearMonthPrefix()}${label}`;
+      // 같은 달·같은 반에서 비어 있는 첫 순번을 차지 (NX: 이미 있으면 덮어쓰지 않음)
+      for (let n = 1; n <= MAX_ORDINAL; n++) {
+        const code = `${prefix}#${n}`;
         const ok = await redis('SET', `roster:${code}`, record, 'EXAT', expiresAt, 'NX');
         if (ok === 'OK') return send(200, { code, expiresAt: expiresAt * 1000 });
       }
-      throw new HttpError(500, '코드를 만들지 못했어요. 다시 시도해 주세요.');
+      throw new HttpError(409, '이번 달 이 반 이름으로 너무 많이 보관했어요. 쓰지 않는 보관본을 지우고 다시 시도해 주세요.');
     }
 
     if (action === 'salt') {
