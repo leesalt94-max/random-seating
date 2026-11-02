@@ -995,9 +995,6 @@ export default function App() {
                 <Icon name="badge" /> {roster ? `명렬표 ${rosterInfo.count}명` : '명렬표 (선택)'}
                 <input type="file" accept=".xlsx,.xls,.csv" onChange={onRosterFile} hidden />
               </label>
-              <button className="control-btn small" onClick={() => setCloud('download')} title="서버에서 명렬표 불러오기">
-                <Icon name="cloud_download" /> 서버에서 불러오기
-              </button>
             </div>
             <p className="hint-text">
               {shortage > 0 ? (
@@ -1178,7 +1175,6 @@ export default function App() {
           roster={roster}
           onRosterFile={onRosterFile}
           onTemplate={() => downloadRosterTemplate(topNum, className)}
-          onCloud={setCloud}
           className={className}
           setClassName={setClassName}
         />

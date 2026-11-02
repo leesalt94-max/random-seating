@@ -95,8 +95,12 @@
 .rc-pw-row {
   position: relative;
 }
-.rc-pw-row .rc-input {
+.rc-modal .rc-input {
+  /* 눈 아이콘 자리만큼 양쪽을 똑같이 비워 모든 입력칸의 글자가 같은 가운데에 오게 */
+  padding-left: 2.6rem;
   padding-right: 2.6rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 .rc-eye {
   position: absolute;
@@ -281,4 +285,30 @@
 .toast-saved b:first-child {
   color: #b9fbd7;
   font-size: 1.1em;
+}
+
+/* 저장 완료 화면 */
+.rc-saved-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  color: #b9fbd7;
+  font-size: clamp(1.2rem, 4vw, 1.5rem);
+}
+.rc-code-label {
+  color: var(--chalk-yellow);
+  font-size: 0.9rem;
+  margin-bottom: -0.4rem;
+}
+.rc-saved-note {
+  color: var(--chalk-white);
+  opacity: 0.85;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+.rc-saved-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
 }

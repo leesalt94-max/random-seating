@@ -30,8 +30,8 @@ function ViewToggle({ teacherView, setTeacherView }) {
 }
 
 // mode: 'print' (인쇄/이미지 저장) | 'display' (전자칠판 전체 화면)
-// 명렬표 메뉴: 엑셀 올리기 · 서버에서 불러오기 · 서버에 보관 · 양식 내려받기
-function RosterMenu({ roster, onRosterFile, onTemplate, onCloud }) {
+// 명렬표 메뉴: 엑셀 올리기 · 양식 내려받기 (서버 보관·불러오기는 첫 화면에서)
+function RosterMenu({ roster, onRosterFile, onTemplate }) {
   const [open, setOpen] = useState(false);
   const boxRef = useRef(null);
   const count = roster ? Object.keys(roster).length : 0;
@@ -67,12 +67,6 @@ function RosterMenu({ roster, onRosterFile, onTemplate, onCloud }) {
               hidden
             />
           </label>
-          <button className="rm-item" role="menuitem" onClick={pick(() => onCloud('download'))}>
-            <Icon name="cloud_download" /> 서버에서 불러오기
-          </button>
-          <button className="rm-item" role="menuitem" onClick={pick(() => onCloud('upload'))} disabled={!count}>
-            <Icon name="cloud_upload" /> 서버에 암호화 보관
-          </button>
           <div className="rm-sep" />
           <button className="rm-item" role="menuitem" onClick={pick(onTemplate)}>
             <Icon name="download" /> 엑셀 양식 내려받기
@@ -83,7 +77,7 @@ function RosterMenu({ roster, onRosterFile, onTemplate, onCloud }) {
   );
 }
 
-export default function ResultOverlay({ mode, onClose, layout, roster, onRosterFile, onTemplate, onCloud, className, setClassName }) {
+export default function ResultOverlay({ mode, onClose, layout, roster, onRosterFile, onTemplate, className, setClassName }) {
   const [teacherView, setTeacherView] = useState(mode === 'print');
   const [saving, setSaving] = useState(false);
   const [isFull, setIsFull] = useState(false);
@@ -170,7 +164,7 @@ export default function ResultOverlay({ mode, onClose, layout, roster, onRosterF
             onChange={(e) => setClassName(e.target.value)}
             placeholder="반 이름 입력"
           />
-          <RosterMenu roster={roster} onRosterFile={onRosterFile} onTemplate={onTemplate} onCloud={onCloud} />
+          <RosterMenu roster={roster} onRosterFile={onRosterFile} onTemplate={onTemplate} />
         </div>
         <div className="pctrl-right">
           <ViewToggle teacherView={teacherView} setTeacherView={setTeacherView} />
@@ -192,7 +186,7 @@ export default function ResultOverlay({ mode, onClose, layout, roster, onRosterF
       </div>
       {!roster && (
         <div className="dummy-notice no-print">
-          <Icon name="info" /> 번호만 표시됩니다. 이름도 넣으려면 위의 「명렬표」에서 엑셀을 올리거나 서버에서 불러오세요. (선택 사항)
+          <Icon name="info" /> 번호만 표시됩니다. 이름도 넣으려면 위의 「명렬표」에서 엑셀을 올리거나, 처음 화면에서 서버에 보관한 명렬표를 불러오세요. (선택 사항)
         </div>
       )}
       <div className="print-sheet-wrapper">

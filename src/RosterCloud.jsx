@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   uploadEncrypted,
   downloadEncrypted,
@@ -82,9 +82,9 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
       setPw('');
       setPw2('');
       onCode(r.display);
-      // 등록이 끝나면 창을 닫고, 실제 등록된 코드는 알림으로 보여 준다 (불러오기 칸에도 미리 채워짐)
       onSaved?.({ ...r, kind });
-      onClose();
+      // 저장 완료 화면: 코드를 보여 주고 5초 뒤 자동으로 닫힘 (닫기 버튼으로 바로 닫을 수도 있음)
+      setResult(r);
     });
   };
 
@@ -109,6 +109,19 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
       setResult({ deleted: shown });
     });
   };
+
+  // 저장 완료 후 5초 카운트다운
+  const [left, setLeft] = useState(5);
+  const saved = uploading && result && !result.deleted;
+  useEffect(() => {
+    if (!saved) return;
+    if (left <= 0) {
+      onClose();
+      return;
+    }
+    const t = setTimeout(() => setLeft((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [saved, left, onClose]);
 
   const copyCode = async () => {
     try {
@@ -205,26 +218,23 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
   } else if (uploading && result) {
     body = (
       <>
-        <p className="rc-done">
-          <Icon name="lock" /> 암호화해서 서버에 보관했어요.
+        <p className="rc-saved-title">
+          <Icon name="check_circle" /> 정상적으로 저장되었어요
         </p>
+        <div className="rc-code-label">불러오기 코드</div>
         <div className="rc-code">{result.display}</div>
-        <button className="modal-btn" onClick={copyCode}>
-          <Icon name={copied ? 'check' : 'content_copy'} /> {copied ? '복사했어요' : '코드 복사'}
-        </button>
-        <ul className="rc-notes">
-          <li>
-            다른 기기의 「서버에서 불러오기」에 <b>코드 + 비밀번호</b>를 넣으면{' '}
-            {kind === 'result' ? '이 자리 배치 결과를 그대로 열어 인쇄할 수 있어요.' : '명렬표를 받을 수 있어요.'}
-          </li>
-          <li>
-            <b>{fmtDate(result.expiresAt - 1000)}</b>까지 보관되고, 그 뒤 서버에서 자동으로 지워져요.
-          </li>
-          <li>비밀번호는 서버에 저장되지 않아 잊으면 되찾을 수 없어요. 코드와 비밀번호를 따로 적어 두세요.</li>
-        </ul>
-        <button className="modal-btn success" onClick={onClose}>
-          확인
-        </button>
+        <p className="rc-saved-note">
+          처음 화면의 「저장한 결과·명렬표 불러오기」에서 이 코드와 비밀번호로 열 수 있어요. {fmtDate(result.expiresAt - 1000)}
+          까지 보관돼요.
+        </p>
+        <div className="rc-saved-actions">
+          <button className="modal-btn" onClick={copyCode}>
+            <Icon name={copied ? 'check' : 'content_copy'} /> {copied ? '복사했어요' : '코드 복사'}
+          </button>
+          <button className="modal-btn success" onClick={onClose}>
+            <Icon name="close" /> 닫기 ({left})
+          </button>
+        </div>
       </>
     );
   } else if (uploading) {

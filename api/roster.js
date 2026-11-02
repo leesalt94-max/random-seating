@@ -18,7 +18,7 @@ const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
 // 정규화된 코드: 한글·영문·숫자와 일부 기호, 2~40자 (src/secure.js 의 canonCode 와 같은 규칙)
-const CODE_RE = /^[가-힣ㄱ-ㅎA-Z0-9#\-_.()]{2,40}$/u;
+const CODE_RE = /^[가-힣ㄱ-ㅎA-Z0-9#_.()-]{2,40}$/;
 const LABEL_RE = /^[가-힣A-Za-z0-9-]{1,20}$/;
 const KINDS = new Set(['roster', 'result']);
 const MAX_ORDINAL = 50;

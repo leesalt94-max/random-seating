@@ -43,7 +43,7 @@ const REC_PARSE = new RegExp(
   `^(?:20)?(\\d{2})년(\\d{1,2})월(.+?)(\\d{1,2}|${ORD_WORDS.join('|')})(?:번째|번|째)(결과)?$`,
 );
 const REC_CANON = /^(\d{2})년(\d{1,2})월(.+)#(\d+)(결과)?$/;
-const CODE_CHARS = /^[가-힣ㄱ-ㅎA-Z0-9#\-_.()]{2,40}$/u;
+const CODE_CHARS = /^[가-힣ㄱ-ㅎA-Z0-9#_.()-]{2,40}$/;
 
 export const CODE_EXAMPLE = '26년 11월 1-5반 첫번째';
 export const ordinalWord = (n) => (n >= 1 && n <= ORD.length ? ORD[n - 1] : String(n));
@@ -145,11 +145,19 @@ async function call(body) {
   }
   let data = {};
   try {
-    data = await res.json();
+    data = JSON.parse(await res.text());
   } catch {
-    // 응답 본문이 없거나 JSON이 아님
+    // 응답 본문이 없거나 JSON이 아님 (플랫폼 오류 페이지 등)
   }
-  if (!res.ok) throw new ApiError(data.error || `서버 오류가 발생했어요. (${res.status})`);
+  if (!res.ok) {
+    // 우리 서버의 안내는 문자열, Vercel 플랫폼 오류는 { error: { code, message } } 형태로 온다
+    if (typeof data.error === 'string') throw new ApiError(data.error);
+    const code = (data.error && data.error.code) || res.headers.get('x-vercel-error') || '';
+    const id = (res.headers.get('x-vercel-id') || '').split('::').pop();
+    throw new ApiError(
+      `서버에서 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요. (HTTP ${res.status}${code ? ` · ${code}` : ''}${id ? ` · ${id}` : ''})`,
+    );
+  }
   return data;
 }
 
