@@ -1,7 +1,8 @@
 import { gridTracks } from './utils';
 
 // 결과 자리표. teacherView면 상하·좌우를 모두 뒤집는다 (교사가 교탁에서 학생 쪽을 바라본 방향).
-export default function SeatMap({ seats, cols, rows, colGaps, rowGaps, roster, teacherView, variant }) {
+// 지정석(fixed)은 결과에서 다른 자리와 구분하지 않는다.
+export default function SeatMap({ seats, cols, rows, colGaps, rowGaps, roles, roster, teacherView, variant }) {
   const cg = teacherView ? [...colGaps].reverse() : colGaps;
   const rg = teacherView ? [...rowGaps].reverse() : rowGaps;
   const cells = [];
@@ -17,7 +18,6 @@ export default function SeatMap({ seats, cols, rows, colGaps, rowGaps, roster, t
       const cls = [
         'sm-cell',
         seat.status === 'excluded' ? 'excluded' : '',
-        seat.status === 'fixed' ? 'fixed' : '',
         joinL ? 'join-l' : '',
         joinR ? 'join-r' : '',
       ]
@@ -26,6 +26,8 @@ export default function SeatMap({ seats, cols, rows, colGaps, rowGaps, roster, t
       const pos = { gridRow: dr * 2 + 1, gridColumn: dc * 2 + 1 };
       const n = seat.studentNum;
       const name = n && roster ? roster[n] : null;
+      const role = n && roles ? roles[n] : null;
+      const badge = role ? <span className={`sm-role ${role === '회장' ? 'pres' : 'vice'}`}>{role}</span> : null;
 
       let content;
       if (seat.status === 'excluded') content = <span className="sm-x">빈자리</span>;
@@ -33,11 +35,18 @@ export default function SeatMap({ seats, cols, rows, colGaps, rowGaps, roster, t
       else if (name)
         content = (
           <>
+            {badge}
             <span className="sm-num-small">{n}번</span>
             <span className="sm-name">{name}</span>
           </>
         );
-      else content = <span className="sm-num-big">{n}</span>;
+      else
+        content = (
+          <>
+            {badge}
+            <span className="sm-num-big">{n}</span>
+          </>
+        );
 
       cells.push(
         <div key={`${r}-${c}`} className={cls} style={pos}>

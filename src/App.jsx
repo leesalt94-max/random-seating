@@ -9,6 +9,7 @@ import './swap.css';
 import './cloud.css';
 import './desk-text.css';
 import './screens.css';
+import './roles.css';
 
 const STORE_KEY = 'random-seating:v2';
 
@@ -44,6 +45,8 @@ const PAIR_PRESETS = [
 ];
 
 const emptySeat = () => ({ status: 'empty', studentNum: null });
+// 뽑기 때 한 자리씩 공개되는 자리 (뽑힌 학생 자리 + 지정석)
+const isDrawTarget = (s) => (s.status === 'empty' && !!s.studentNum) || s.status === 'fixed';
 
 function Icon({ name, style }) {
   return (
@@ -53,7 +56,7 @@ function Icon({ name, style }) {
   );
 }
 
-function Desk({ seat, revealed, active, frontValue, roster, clickable, pending, shuffling, joinL, joinR, onClick, style, swapMode, swapSelected, justSwapped }) {
+function Desk({ seat, revealed, active, frontValue, roster, clickable, pending, shuffling, joinL, joinR, onClick, style, swapMode, swapSelected, justSwapped, markFixed, role, roleMode }) {
   const { status, studentNum } = seat;
   const backName = studentNum && roster ? roster[studentNum] : null;
   const rollName = frontValue != null && roster ? roster[frontValue] : null;
@@ -61,7 +64,7 @@ function Desk({ seat, revealed, active, frontValue, roster, clickable, pending, 
     'desk-wrapper',
     revealed ? 'flipped' : '',
     status === 'excluded' ? 'excluded' : '',
-    status === 'fixed' ? 'fixed' : '',
+    markFixed && status === 'fixed' ? 'fixed' : '', // 지정석 표시는 자리 편집 중에만 (결과에서는 구분 없음)
     clickable ? 'clickable' : '',
     active ? 'active' : '',
     pending ? 'pending' : '',
@@ -72,6 +75,8 @@ function Desk({ seat, revealed, active, frontValue, roster, clickable, pending, 
     swapMode ? 'swap-mode' : '',
     swapSelected ? 'swap-selected' : '',
     justSwapped ? 'just-swapped' : '',
+    roleMode ? 'role-mode' : '',
+    role ? `has-role role-${role === '회장' ? 'pres' : 'vice'}` : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -96,6 +101,7 @@ function Desk({ seat, revealed, active, frontValue, roster, clickable, pending, 
             swapMode ? <span className="back-empty">빈자리</span> : null
           ) : studentNum ? (
             <>
+              {role && <span className="role-badge">{role}</span>}
               <span className="back-num">{backName ? `${studentNum}번` : studentNum}</span>
               {backName && (
                 <span className="back-name" style={{ '--len': backName.length }}>
@@ -170,7 +176,10 @@ export default function App() {
   const [rememberRoster, setRememberRoster] = useState(saved.rememberRoster === true);
   const [roster, setRoster] = useState(saved.rememberRoster === true ? (saved.roster ?? null) : null);
   const [lastCode, setLastCode] = useState(saved.lastCode ?? '');
-  const [cloud, setCloud] = useState(null); // 'upload' | 'download'
+  const [cloud, setCloud] = useState(null); // 'upload' | 'upload-result' | 'download'
+  // 회장·부회장: 학생 번호에 붙임 (자리를 바꿔도 따라감). 번호만 저장하므로 개인정보 아님
+  const [roles, setRoles] = useState(() => (saved.roles && typeof saved.roles === 'object' ? saved.roles : {}));
+  const [roleMode, setRoleMode] = useState(false);
   const [className, setClassName] = useState(saved.className ?? '1학년 1반');
   const [revealMode, setRevealMode] = useState(SPEEDS[saved.revealMode] ? saved.revealMode : 'normal');
   const [soundOn, setSoundOn] = useState(saved.soundOn ?? true);
@@ -227,11 +236,12 @@ export default function App() {
       roster: rememberRoster ? roster : null,
       rememberRoster,
       lastCode,
+      roles,
       className,
       revealMode,
       soundOn,
     });
-  }, [cols, rows, maxNum, excludedText, pairSize, colGaps, rowGaps, dims, seats, roster, rememberRoster, lastCode, className, revealMode, soundOn, saved]);
+  }, [cols, rows, maxNum, excludedText, pairSize, colGaps, rowGaps, dims, seats, roster, rememberRoster, lastCode, roles, className, revealMode, soundOn, saved]);
 
   useEffect(() => {
     if (!toast) return;
@@ -291,10 +301,70 @@ export default function App() {
   };
 
   const onCloudLoaded = (r) => {
-    setRoster(r.roster);
-    if (r.className) setClassName(r.className);
     setCloud(null);
-    showToast(`서버에서 명렬표 ${Object.keys(r.roster).length}명을 불러왔어요.`);
+    if (r.kind === 'result') return loadResult(r.data);
+    setRoster(r.data.roster);
+    if (r.data.className) setClassName(r.data.className);
+    showToast(`서버에서 명렬표 ${Object.keys(r.data.roster).length}명을 불러왔어요.`);
+  };
+
+  // 서버에 보관할 자리 배치 결과 (암호화 전 내용)
+  const resultPayload = () => {
+    const used = new Set(seats.map((s) => s.studentNum).filter(Boolean));
+    const names = {};
+    if (roster) for (const n of used) if (roster[n]) names[n] = roster[n];
+    const usedRoles = {};
+    for (const [n, r] of Object.entries(roles)) if (used.has(Number(n))) usedRoles[n] = r;
+    return {
+      cols: dims.cols,
+      rows: dims.rows,
+      colGaps,
+      rowGaps,
+      seats: seats.map((s) => ({ status: s.status, studentNum: s.studentNum })),
+      roster: names,
+      roles: usedRoles,
+    };
+  };
+
+  // 서버에서 받은 결과를 자리판에 그대로 펼침
+  const loadResult = (d) => {
+    clearSwap();
+    setRoleMode(false);
+    runRef.current++;
+    sound.stopRiser();
+    setCols(String(d.cols));
+    setRows(String(d.rows));
+    setDims({ cols: d.cols, rows: d.rows });
+    setColGaps(d.colGaps);
+    setRowGaps(d.rowGaps);
+    setPairSize('custom');
+    setSeats(d.seats);
+    if (Object.keys(d.roster).length) setRoster(d.roster);
+    setRoles(d.roles);
+    if (d.className) setClassName(d.className);
+    drawRef.current = { seats: d.seats, remaining: [], left: 0, cfg: SPEEDS[revealMode] };
+    setRevealed(new Set(d.seats.map((_, i) => i)));
+    setActiveIdx(null);
+    setRollValue(null);
+    setCountdown(null);
+    setPhase('done');
+    setView('board');
+    showToast('서버에서 자리 배치 결과를 불러왔어요.');
+  };
+
+  // ── 회장·부회장 표시 ── 누를 때마다 회장 → 부회장 → 해제 (회장은 한 명)
+  const onRoleClick = (i) => {
+    const n = seats[i].studentNum;
+    if (!n) return;
+    const cur = roles[n];
+    const next = { ...roles };
+    if (!cur) {
+      for (const k of Object.keys(next)) if (next[k] === '회장') delete next[k];
+      next[n] = '회장';
+    } else if (cur === '회장') next[n] = '부회장';
+    else delete next[n];
+    setRoles(next);
+    sound.tick?.(1.3);
   };
 
   const applyRosterNumbers = () => {
@@ -358,6 +428,7 @@ export default function App() {
 
   const resetDraw = () => {
     clearSwap();
+    setRoleMode(false);
     sound.stopRiser();
     runRef.current++;
     skipRef.current = false;
@@ -455,18 +526,21 @@ export default function App() {
     skipRef.current = false;
     busyRef.current = false;
     clearSwap();
+    setRoleMode(false);
     sound.unlock();
 
     const cfg = SPEEDS[revealMode];
     const assigned = shuffle(pool);
     let k = 0;
     const next = seats.map((s) => (s.status === 'excluded' || s.status === 'fixed' ? s : { status: 'empty', studentNum: assigned[k++] ?? null }));
-    drawRef.current = { seats: next, remaining: [...assigned], cfg };
+    // 지정석 학생도 뽑기 연출에 섞어서 공개 → 학생들이 누가 지정석인지 알 수 없게
+    const fixedNums = next.filter((s) => s.status === 'fixed').map((s) => s.studentNum);
+    drawRef.current = { seats: next, remaining: [...assigned, ...fixedNums], cfg };
     setSeats(next);
     setRevealed(new Set());
     setActiveIdx(null);
     setRollValue(null);
-    setRollPool(assigned);
+    setRollPool([...assigned, ...fixedNums]);
 
     // 1) 섞기 + 드럼롤 (점점 빨라짐)
     setPhase('shuffling');
@@ -510,7 +584,7 @@ export default function App() {
     sound.beep(true);
     if (revealMode === 'click') return;
 
-    const order = shuffle(next.map((s, i) => (s.status === 'empty' && s.studentNum ? i : -1)).filter((i) => i >= 0));
+    const order = shuffle(next.map((s, i) => (isDrawTarget(s) ? i : -1)).filter((i) => i >= 0));
     for (let i = 0; i < order.length; i++) {
       if (!alive()) return;
       if (skipRef.current) break;
@@ -526,7 +600,7 @@ export default function App() {
     if (busyRef.current) return;
     const d = drawRef.current;
     const s = d.seats[idx];
-    if (s.status !== 'empty' || !s.studentNum || revealed.has(idx)) return;
+    if (!isDrawTarget(s) || revealed.has(idx)) return;
     busyRef.current = true;
     const id = runRef.current;
     const alive = () => runRef.current === id;
@@ -542,7 +616,9 @@ export default function App() {
   };
 
   const onDeskClick = (i) => {
-    if (phase === 'done' && swapMode) {
+    if (phase === 'done' && roleMode) {
+      onRoleClick(i);
+    } else if (phase === 'done' && swapMode) {
       onSwapClick(i);
     } else if (phase === 'prepare') {
       setEditIdx(i);
@@ -738,7 +814,7 @@ export default function App() {
                   <Icon name="shield_lock" /> 서버 보관 <span className="optional">선택</span>
                 </div>
                 <p className="setup-help">
-                  비밀번호로 암호화해 서버에 보관하면, 다른 기기(전자칠판 등)에서 코드와 비밀번호로 불러올 수 있어요.
+                  비밀번호로 암호화해 서버에 보관하면, 다른 기기(전자칠판 등)에서 코드와 비밀번호로 불러올 수 있어요. 보관해 둔 자리 배치 결과도 여기서 불러와요.
                 </p>
                 <div className="setup-row wrap">
                   <button
@@ -777,6 +853,7 @@ export default function App() {
             lastCode={lastCode}
             onCode={setLastCode}
             onLoaded={onCloudLoaded}
+            getResult={resultPayload}
             onClose={() => setCloud(null)}
           />
         )}
@@ -790,7 +867,7 @@ export default function App() {
   const R = dims.rows;
   const editing = phase === 'prepare';
   const busy = phase === 'shuffling' || phase === 'countdown' || phase === 'revealing';
-  const drawTotal = drawRef.current ? drawRef.current.seats.filter((s) => s.status === 'empty' && s.studentNum).length : 0;
+  const drawTotal = drawRef.current ? drawRef.current.seats.filter(isDrawTarget).length : 0;
   const drawDone = drawRef.current ? drawTotal - drawRef.current.remaining.length : 0;
 
   return (
@@ -807,7 +884,7 @@ export default function App() {
                 setView('setup');
               }
             }}
-            disabled={busy || swapMode}
+            disabled={busy || swapMode || roleMode}
           >
             <Icon name={phase === 'done' ? 'edit' : 'arrow_back'} /> {phase === 'done' ? '자리 편집' : '돌아가기'}
           </button>
@@ -844,10 +921,21 @@ export default function App() {
                 </button>
               </>
             )}
-            {phase === 'done' && !swapMode && (
+            {phase === 'done' && roleMode && (
+              <button className="control-btn swap-btn active" onClick={() => setRoleMode(false)}>
+                <Icon name="check" /> 표시 완료
+              </button>
+            )}
+            {phase === 'done' && !swapMode && !roleMode && (
               <>
                 <button className="control-btn swap-btn" onClick={() => setSwapMode(true)}>
                   <Icon name="swap_horiz" /> 자리 바꾸기
+                </button>
+                <button className="control-btn swap-btn" onClick={() => setRoleMode(true)}>
+                  <Icon name="military_tech" /> 회장·부회장
+                </button>
+                <button className="control-btn" onClick={() => setCloud('upload-result')}>
+                  <Icon name="cloud_upload" /> 결과 보관
                 </button>
                 <button className="control-btn" onClick={startDraw}>
                   <Icon name="replay" /> 다시 뽑기
@@ -892,7 +980,7 @@ export default function App() {
                 <input type="file" accept=".xlsx,.xls,.csv" onChange={onRosterFile} hidden />
               </label>
               <button className="control-btn small" onClick={() => setCloud('download')} title="서버에서 명렬표 불러오기">
-                <Icon name="cloud_download" /> 서버 명렬표
+                <Icon name="cloud_download" /> 서버에서 불러오기
               </button>
             </div>
             <p className="hint-text">
@@ -916,8 +1004,14 @@ export default function App() {
             {drawDone} / {drawTotal}
           </p>
         )}
-        {phase === 'done' && !swapMode && (
+        {phase === 'done' && !swapMode && !roleMode && (
           <p className="reveal-status">🎉 자리 배치 완료! 전자칠판 화면으로 띄우거나 인쇄하세요.</p>
+        )}
+        {phase === 'done' && roleMode && (
+          <p className="reveal-status swap-hint">
+            <Icon name="military_tech" style={{ fontSize: '1em' }} /> 학생 자리를 누를 때마다 회장 → 부회장 → 해제 순서로 바뀌어요
+            (회장은 한 명)
+          </p>
         )}
         {phase === 'done' && swapMode && (
           <p className="reveal-status swap-hint">
@@ -944,10 +1038,13 @@ export default function App() {
               {seats.map((s, i) => {
                 const r = Math.floor(i / C);
                 const c = i % C;
-                const drawable = s.status === 'empty';
+                // 뽑기 중에는 지정석도 다른 자리와 똑같이 뒤집혀 있다가 차례로 공개
+                const drawable = isDrawTarget(s);
                 const swapping = phase === 'done' && swapMode;
                 const isRevealed =
-                  s.status === 'fixed' || (s.status !== 'excluded' && revealed.has(i)) || (swapping && s.status === 'excluded');
+                  (s.status === 'fixed' && editing) ||
+                  (s.status !== 'excluded' && revealed.has(i)) ||
+                  (swapping && s.status === 'excluded');
                 const active = activeIdx === i;
                 const frontValue = active
                   ? rollValue
@@ -963,9 +1060,12 @@ export default function App() {
                     active={active}
                     frontValue={frontValue}
                     roster={roster}
-                    clickable={editing || pending || swapping}
+                    clickable={editing || pending || swapping || (phase === 'done' && roleMode && !!s.studentNum)}
                     pending={pending}
                     swapMode={swapping}
+                    markFixed={editing}
+                    role={phase === 'done' && s.studentNum ? roles[s.studentNum] : null}
+                    roleMode={phase === 'done' && roleMode}
                     swapSelected={swapping && swapFrom === i}
                     justSwapped={justSwapped.includes(i)}
                     shuffling={phase === 'shuffling' && drawable}
@@ -1058,7 +1158,7 @@ export default function App() {
         <ResultOverlay
           mode={overlay}
           onClose={() => setOverlay(null)}
-          layout={{ seats, cols: C, rows: R, colGaps, rowGaps }}
+          layout={{ seats, cols: C, rows: R, colGaps, rowGaps, roles }}
           roster={roster}
           onRosterFile={onRosterFile}
           onTemplate={() => downloadRosterTemplate(topNum, className)}
@@ -1075,6 +1175,7 @@ export default function App() {
           lastCode={lastCode}
           onCode={setLastCode}
           onLoaded={onCloudLoaded}
+          getResult={resultPayload}
           onClose={() => setCloud(null)}
         />
       )}

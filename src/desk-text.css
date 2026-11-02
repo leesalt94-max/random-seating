@@ -31,10 +31,6 @@
   font-size: min(48cqi, 62cqh);
 }
 
-/* 고정석(★)은 번호 색으로 구분 */
-.desk-wrapper.fixed .desk-back.has-name .back-num {
-  color: #c77800;
-}
 
 /* ── 돌아가는 번호 (어두운 책상) ── */
 .desk-front .roll {

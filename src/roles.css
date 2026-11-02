@@ -1,0 +1,85 @@
+/* ===================================== */
+/*   회장 · 부회장 표시                    */
+/* ===================================== */
+
+/* 자리판 책상 */
+.desk-back {
+  position: relative;
+}
+.role-badge {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -55%);
+  z-index: 2;
+  padding: 0.12em 0.6em;
+  border-radius: 999px;
+  font-family: 'Jua', sans-serif;
+  font-weight: 400;
+  font-size: clamp(0.62rem, min(13cqi, 20cqh), 1.25rem);
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+}
+.has-role.role-pres .role-badge {
+  background: #e53935;
+  color: #fff;
+}
+.has-role.role-vice .role-badge {
+  background: #1e88e5;
+  color: #fff;
+}
+.has-role.role-pres .desk-back {
+  border-color: #e53935;
+  box-shadow: 0 0 0 3px rgba(229, 57, 53, 0.35), 0 3px 6px #0000004d;
+}
+.has-role.role-vice .desk-back {
+  border-color: #1e88e5;
+  box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.35), 0 3px 6px #0000004d;
+}
+/* 배지가 위로 살짝 튀어나오므로 책상 뒤집기 영역이 잘리지 않게 */
+.desk-wrapper.has-role {
+  z-index: 1;
+}
+
+/* 표시 모드: 누를 수 있는 책상 */
+.desk-wrapper.role-mode.clickable {
+  cursor: pointer;
+}
+.desk-wrapper.role-mode.clickable:hover .desk-back {
+  border-color: var(--chalk-yellow);
+  transform: rotateY(180deg) scale(1.03);
+}
+
+/* 인쇄 · 전자칠판 결과표 */
+.sm-cell {
+  position: relative;
+}
+.sm-role {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  padding: 0.05em 0.45em;
+  border-radius: 999px;
+  font-size: clamp(0.55rem, 1.6vw, 0.85rem);
+  line-height: 1.3;
+  color: #fff;
+  white-space: nowrap;
+}
+.sm-role.pres {
+  background: #e53935;
+}
+.sm-role.vice {
+  background: #1e88e5;
+}
+.seatmap-display .sm-role {
+  font-size: min(16cqh, 11cqw);
+  top: 4%;
+  left: 4%;
+}
+@media print {
+  .sm-role {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
