@@ -245,11 +245,23 @@ export default function App() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3500);
+    const t = setTimeout(() => setToast(null), toast.ms || 3500);
     return () => clearTimeout(t);
   }, [toast]);
 
-  const showToast = (msg) => setToast({ msg, id: Date.now() });
+  const showToast = (msg, ms) => setToast({ msg, ms, id: Date.now() });
+
+  const onCloudSaved = (r) =>
+    showToast(
+      <div className="toast-saved">
+        <b>✅ 정상적으로 등록되었어요.</b>
+        <br />
+        {r.kind === 'result' ? '결과' : '명렬표'} 불러오기 코드: 「<b>{r.display}</b>」
+        <br />
+        <small>처음 화면의 「저장한 결과·명렬표 불러오기」에서 코드와 비밀번호로 열 수 있어요.</small>
+      </div>,
+      9000,
+    );
 
   const excludedNums = useMemo(() => parseNumberList(excludedText), [excludedText]);
   const excludedSet = useMemo(() => new Set(excludedNums), [excludedNums]);
@@ -670,6 +682,9 @@ export default function App() {
       <div className="app-container">
         <div className="setup-view">
           <h1 className="setup-title">우리반 자리배치표</h1>
+          <button className="load-btn" onClick={() => setCloud('download')}>
+            <Icon name="cloud_download" /> 저장한 결과·명렬표 불러오기
+          </button>
           <div className="setup-top">
           <div className="input-group">
             <div className="input-wrapper">
@@ -853,6 +868,7 @@ export default function App() {
             lastCode={lastCode}
             onCode={setLastCode}
             onLoaded={onCloudLoaded}
+            onSaved={onCloudSaved}
             getResult={resultPayload}
             onClose={() => setCloud(null)}
           />
@@ -1175,6 +1191,7 @@ export default function App() {
           lastCode={lastCode}
           onCode={setLastCode}
           onLoaded={onCloudLoaded}
+          onSaved={onCloudSaved}
           getResult={resultPayload}
           onClose={() => setCloud(null)}
         />

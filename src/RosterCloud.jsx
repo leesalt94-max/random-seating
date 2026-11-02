@@ -21,7 +21,7 @@ const fmtDate = (ms) =>
   ms ? new Date(ms).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
 
 // mode: 'upload' (명렬표 보관) | 'upload-result' (자리 배치 결과 보관) | 'download' (명렬표·결과 불러오기)
-export default function RosterCloud({ mode, roster, className, lastCode, onCode, onLoaded, onClose, getResult }) {
+export default function RosterCloud({ mode, roster, className, lastCode, onCode, onLoaded, onSaved, onClose, getResult }) {
   const kind = mode === 'upload-result' ? 'result' : 'roster';
   const uploading = mode !== 'download';
   const suggestion = suggestCode(className, kind);
@@ -81,8 +81,10 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
       const r = await uploadEncrypted({ kind, payload, password: pw, codeText: code, autoLabel });
       setPw('');
       setPw2('');
-      setResult(r);
       onCode(r.display);
+      // 등록이 끝나면 창을 닫고, 실제 등록된 코드는 알림으로 보여 준다 (불러오기 칸에도 미리 채워짐)
+      onSaved?.({ ...r, kind });
+      onClose();
     });
   };
 

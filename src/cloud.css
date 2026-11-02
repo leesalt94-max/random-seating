@@ -248,3 +248,37 @@
   font-size: inherit;
   padding: 0;
 }
+
+/* 첫 화면: 저장한 결과·명렬표 불러오기 */
+.load-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: -0.6rem;
+  padding: 0.6rem 1.4rem;
+  min-height: 48px;
+  font-family: 'Jua', sans-serif;
+  font-size: clamp(1rem, 3vw, 1.25rem);
+  color: var(--chalk-yellow);
+  background: rgba(0, 0, 0, 0.18);
+  border: 2px solid var(--chalk-yellow);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.load-btn:hover {
+  background: rgba(248, 225, 118, 0.15);
+}
+.toast small {
+  opacity: 0.8;
+}
+
+.toast-saved {
+  font-size: clamp(1rem, 2.6vw, 1.3rem);
+  line-height: 1.55;
+  padding: 0.3rem 0.4rem;
+}
+.toast-saved b:first-child {
+  color: #b9fbd7;
+  font-size: 1.1em;
+}
