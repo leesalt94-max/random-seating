@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { shuffle, sleep, parseNumberList, formatNumberList, presetGaps, fitArray, gridTracks } from './utils';
-import { readRosterFile, rosterSummary, downloadRosterTemplate } from './roster';
+import { readRosterFileWithClass, rosterSummary, downloadRosterTemplate, parseClassName } from './roster';
 import { sound } from './sound';
 import ResultOverlay from './ResultOverlay';
 import Confetti from './Confetti';
@@ -180,6 +180,7 @@ export default function App() {
   // 회장·부회장: 학생 번호에 붙임 (자리를 바꿔도 따라감). 번호만 저장하므로 개인정보 아님
   const [roles, setRoles] = useState(() => (saved.roles && typeof saved.roles === 'object' ? saved.roles : {}));
   const [roleMode, setRoleMode] = useState(false);
+  const [classEdit, setClassEdit] = useState(null); // { grade, classNo } 편집 중일 때
   const [className, setClassName] = useState(saved.className ?? '1학년 1반');
   const [revealMode, setRevealMode] = useState(SPEEDS[saved.revealMode] ? saved.revealMode : 'normal');
   const [soundOn, setSoundOn] = useState(saved.soundOn ?? true);
@@ -300,13 +301,16 @@ export default function App() {
     e.target.value = '';
     if (!file) return;
     try {
-      const r = await readRosterFile(file);
+      const { roster: r, grade, classNo } = await readRosterFileWithClass(file);
       if (!Object.keys(r).length) {
         alert('파일에서 번호/이름을 찾지 못했습니다.\n「양식 내려받기」로 받은 파일의 이름 칸에 학생 이름을 적어 다시 올려주세요.');
         return;
       }
       setRoster(r);
-      showToast(`명렬표 ${Object.keys(r).length}명을 불러왔어요.`);
+      // 양식 맨 위 학년·반 칸이 채워져 있으면 반 이름을 자동으로 맞춤
+      const cls = grade && classNo ? `${grade}학년 ${classNo}반` : null;
+      if (cls) setClassName(cls);
+      showToast(`명렬표 ${Object.keys(r).length}명을 불러왔어요.${cls ? ` (${cls})` : ''}`);
     } catch {
       alert('파일을 읽는 중 오류가 발생했습니다.');
     }
@@ -342,6 +346,7 @@ export default function App() {
   const loadResult = (d) => {
     clearSwap();
     setRoleMode(false);
+    setClassEdit(null);
     runRef.current++;
     sound.stopRiser();
     setCols(String(d.cols));
@@ -1016,6 +1021,60 @@ export default function App() {
             {revealMode === 'click' ? '반짝이는 책상을 눌러 한 자리씩 공개하세요! ' : '공개 중… '}
             {drawDone} / {drawTotal}
           </p>
+        )}
+        {phase === 'done' && (
+          <div className="class-bar">
+            {classEdit ? (
+              <form
+                className="class-edit"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const g = parseInt(classEdit.grade, 10);
+                  const c = parseInt(classEdit.classNo, 10);
+                  if (!(g > 0 && g < 100 && c > 0 && c < 100)) return showToast('학년과 반을 숫자로 적어 주세요.');
+                  setClassName(`${g}학년 ${c}반`);
+                  setClassEdit(null);
+                }}
+              >
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  value={classEdit.grade}
+                  onChange={(e) => setClassEdit((v) => ({ ...v, grade: e.target.value }))}
+                  aria-label="학년"
+                  autoFocus
+                />
+                <span>학년</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  value={classEdit.classNo}
+                  onChange={(e) => setClassEdit((v) => ({ ...v, classNo: e.target.value }))}
+                  aria-label="반"
+                />
+                <span>반</span>
+                <button type="submit" className="control-btn small primary">
+                  확인
+                </button>
+                <button type="button" className="control-btn small" onClick={() => setClassEdit(null)}>
+                  취소
+                </button>
+              </form>
+            ) : (
+              <button
+                className="class-chip"
+                onClick={() => {
+                  const { grade, classNo } = parseClassName(className);
+                  setClassEdit({ grade: grade ?? '', classNo: classNo ?? '' });
+                }}
+                title="학년·반 고치기"
+              >
+                {className || '학년·반 입력'} <Icon name="edit" />
+              </button>
+            )}
+          </div>
         )}
         {phase === 'done' && !swapMode && !roleMode && (
           <p className="reveal-status">🎉 자리 배치 완료! 전자칠판 화면으로 띄우거나 인쇄하세요.</p>

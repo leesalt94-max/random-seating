@@ -19,12 +19,46 @@ async function readWorkbook(file) {
   return read(await file.arrayBuffer(), { type: 'array' });
 }
 
-// 명렬표 엑셀 → { 번호: 이름 }
-// '번호'/'이름' 머리글이 있으면 그 열을 쓰고, 없으면 각 행의 첫 숫자 칸 = 번호, 그 뒤 첫 글자 칸 = 이름
-export async function readRosterFile(file) {
+// 양식 위쪽의 '학년' / '반' 칸 읽기 (바로 오른쪽 칸의 숫자). 없으면 null
+function readClassInfo(rows) {
+  let grade = null;
+  let classNo = null;
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const row = rows[i];
+    for (let j = 0; j < row.length; j++) {
+      const key = String(row[j]).replace(/\s/g, '');
+      if (key !== '학년' && key !== '반') continue;
+      const val = row.slice(j + 1).find((v) => String(v).trim() !== '');
+      const n = parseInt(String(val ?? '').replace(/[^0-9]/g, ''), 10);
+      if (!(n > 0 && n < 100)) continue;
+      if (key === '학년' && grade == null) grade = n;
+      if (key === '반' && classNo == null) classNo = n;
+    }
+  }
+  return { grade, classNo };
+}
+
+// 반 이름 "1학년 5반" → { grade: 1, classNo: 5 }
+export function parseClassName(name) {
+  const m = String(name || '').match(/(\d+)\s*학년\s*(\d+)\s*반/);
+  return m ? { grade: parseInt(m[1], 10), classNo: parseInt(m[2], 10) } : { grade: null, classNo: null };
+}
+
+// 명렬표 엑셀 → { roster: { 번호: 이름 }, grade, classNo }
+export async function readRosterFileWithClass(file) {
   const wb = await readWorkbook(file);
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+  return { roster: parseRosterRows(rows), ...readClassInfo(rows) };
+}
+
+// 명렬표 엑셀 → { 번호: 이름 }
+export async function readRosterFile(file) {
+  return (await readRosterFileWithClass(file)).roster;
+}
+
+// '번호'/'이름' 머리글이 있으면 그 열을 쓰고, 없으면 각 행의 첫 숫자 칸 = 번호, 그 뒤 첫 글자 칸 = 이름
+function parseRosterRows(rows) {
 
   let numCol = -1;
   let nameCol = -1;
@@ -72,9 +106,10 @@ export function rosterSummary(roster) {
   return { count: nums.length, max, missing };
 }
 
-// 명렬표 양식: 번호는 미리 채우고 이름 칸만 비워둔 엑셀
+// 명렬표 양식: 맨 위에 학년·반, 번호는 미리 채우고 이름 칸만 비워둔 엑셀
 export function downloadRosterTemplate(count, className) {
-  const rows = [['번호', '이름']];
+  const { grade, classNo } = parseClassName(className);
+  const rows = [['학년', grade ?? ''], ['반', classNo ?? ''], [], ['번호', '이름']];
   for (let i = 1; i <= count; i++) rows.push([i, '']);
   const sheet = utils.aoa_to_sheet(rows);
   sheet['!cols'] = [{ wch: 8 }, { wch: 16 }];
@@ -82,12 +117,12 @@ export function downloadRosterTemplate(count, className) {
   const guide = utils.aoa_to_sheet([
     ['명렬표 작성 방법'],
     [''],
-    ['1. 「명렬표」 시트의 이름 칸에 학생 이름을 입력하세요.'],
+    ['1. 「명렬표」 시트 맨 위의 학년·반 칸에 숫자를 적고(예: 1, 5), 이름 칸에 학생 이름을 입력하세요.'],
     ['2. 전출 간 학생은 이름 칸을 비워 두거나 「전출」이라고 적으세요.'],
     ['3. 전학 온 학생이 있으면 맨 아래에 번호와 이름을 이어서 적으세요.'],
     ['4. 저장한 뒤 자리뽑기 화면의 「엑셀 올리기」로 이 파일을 올리세요.'],
     [''],
-    ['※ 번호(A열)와 이름(B열)의 위치와 첫 줄 제목은 바꾸지 마세요.'],
+    ['※ 학년·반 칸과 「번호」「이름」 제목 줄의 위치는 바꾸지 마세요. 올리면 반 이름이 자동으로 「1학년 5반」처럼 채워져요.'],
   ]);
   guide['!cols'] = [{ wch: 70 }];
 

@@ -83,3 +83,52 @@
     print-color-adjust: exact;
   }
 }
+
+/* 뽑기 완료 후 학년·반 표시 */
+.class-bar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.35rem;
+  z-index: 1;
+  flex-shrink: 0;
+}
+.class-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: 'Jua', sans-serif;
+  font-size: clamp(1.1rem, 3.2vw, 1.8rem);
+  color: var(--chalk-white);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px dashed rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  padding: 0.15rem 1rem;
+  cursor: pointer;
+}
+.class-chip .material-symbols-rounded {
+  font-size: 0.8em;
+  opacity: 0.6;
+}
+.class-chip:hover {
+  border-color: var(--chalk-yellow);
+}
+.class-edit {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+  font-family: 'Jua', sans-serif;
+  font-size: clamp(1rem, 3vw, 1.4rem);
+  color: var(--chalk-white);
+}
+.class-edit input {
+  width: 3.2em;
+  text-align: center;
+  font: inherit;
+  color: var(--chalk-white);
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid var(--chalk-yellow);
+  border-radius: 8px;
+  padding: 0.1rem 0.2rem;
+}
