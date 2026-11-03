@@ -108,3 +108,21 @@
     align-content: start;
   }
 }
+
+/* 인쇄: 휴대폰 등 '배경 그래픽' 인쇄가 꺼진 브라우저에서도 교탁 칸과 칸 색이 그대로 나오게 */
+.print-sheet,
+.print-sheet * {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+/* 배경색이 끝내 빠지더라도 교탁 칸 테두리는 남도록 */
+.ps-teacher-desk {
+  border: 2px solid #3e2723;
+}
+@media print {
+  .ps-teacher-desk {
+    background: #3e2723 !important;
+    color: #f8e176 !important;
+    border: 2px solid #3e2723 !important;
+  }
+}

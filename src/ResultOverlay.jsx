@@ -205,7 +205,7 @@ export default function ResultOverlay({ mode, onClose, layout, roster, onRosterF
             )}
           </button>
           <button className="pctrl-btn print-btn" onClick={() => window.print()}>
-            <Icon name="print" /> PDF 인쇄
+            <Icon name="print" /> 인쇄
           </button>
         </div>
       </div>
