@@ -312,3 +312,22 @@
   grid-template-columns: 1fr 1fr;
   gap: 0.5rem;
 }
+
+/* 같은 코드가 있을 때 덮어쓰기 경고 */
+.rc-conflict {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  text-align: left;
+  padding: 0.75rem 0.8rem;
+  border: 2px solid #ffb74d;
+  border-radius: 10px;
+  background: rgba(255, 183, 77, 0.12);
+  color: var(--chalk-white);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.rc-conflict > b {
+  color: #ffcc80;
+  font-size: 1rem;
+}

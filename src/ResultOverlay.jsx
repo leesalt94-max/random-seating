@@ -79,6 +79,23 @@ function RosterMenu({ roster, onRosterFile, onTemplate }) {
 
 export default function ResultOverlay({ mode, onClose, layout, roster, onRosterFile, onTemplate, className, setClassName }) {
   const [teacherView, setTeacherView] = useState(mode === 'print');
+  // 인쇄물 날짜 표시 여부 (이 기기에 기억, 기본은 표시)
+  const [showDate, setShowDate] = useState(() => {
+    try {
+      return localStorage.getItem('random-seating:print-date') !== 'off';
+    } catch {
+      return true;
+    }
+  });
+  const toggleDate = () =>
+    setShowDate((v) => {
+      try {
+        localStorage.setItem('random-seating:print-date', v ? 'off' : 'on');
+      } catch {
+        // 저장할 수 없는 환경은 무시
+      }
+      return !v;
+    });
   const [saving, setSaving] = useState(false);
   const [isFull, setIsFull] = useState(false);
   const sheetRef = useRef(null);
@@ -167,6 +184,14 @@ export default function ResultOverlay({ mode, onClose, layout, roster, onRosterF
           <RosterMenu roster={roster} onRosterFile={onRosterFile} onTemplate={onTemplate} />
         </div>
         <div className="pctrl-right">
+          <button
+            className={`pctrl-btn view-toggle-btn ${showDate ? 'teacher-active' : ''}`}
+            onClick={toggleDate}
+            title={showDate ? '날짜 표시 중 (누르면 숨김)' : '날짜 숨김 (누르면 표시)'}
+            aria-pressed={showDate}
+          >
+            <Icon name={showDate ? 'event_available' : 'event_busy'} /> {showDate ? '날짜 표시' : '날짜 숨김'}
+          </button>
           <ViewToggle teacherView={teacherView} setTeacherView={setTeacherView} />
           <button className="pctrl-btn image-btn" onClick={saveImage} disabled={saving}>
             {saving ? (
@@ -193,7 +218,7 @@ export default function ResultOverlay({ mode, onClose, layout, roster, onRosterF
         <div className="print-sheet" ref={sheetRef}>
           <div className="ps-header">
             <h1 className="ps-title">{className} 자리배치표</h1>
-            <p className="ps-date">{date}</p>
+            {showDate && <p className="ps-date">{date}</p>}
           </div>
           {!teacherView && <DeskBanner className="ps-teacher-desk" />}
           {map}

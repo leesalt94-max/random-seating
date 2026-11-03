@@ -9,6 +9,7 @@
 //    salt   { code }        → { salt }
 //    get    { code, auth }  → { kind, iv, ct, expiresAt }
 //    delete { code, auth }  → { ok }
+//    overwrite { kind, code, auth(기존 비밀번호), salt, iv, ct, verifier(새 비밀번호) } → { code, kind, expiresAt }
 //
 //  code 는 브라우저가 정규화한 값(공백 제거). 명렬표와 결과는 같은 코드 공간을 쓴다.
 // ─────────────────────────────────────────────────────────────
@@ -36,9 +37,10 @@ const IP_FAIL_MAX = 15; // 한 IP가 1시간에 15번 틀리면
 const IP_FAIL_WINDOW = 3600; //   1시간 차단
 
 class HttpError extends Error {
-  constructor(status, message) {
+  constructor(status, message, extra) {
     super(message);
     this.status = status;
+    this.extra = extra;
   }
 }
 
@@ -160,7 +162,7 @@ export default async function handler(req, res) {
     const body = typeof req.body === 'object' && req.body ? req.body : {};
     const { action } = body;
 
-    if (action === 'create') {
+    const checkNewRecord = () => {
       const { kind, salt, iv, ct, verifier } = body;
       if (
         !KINDS.has(kind) ||
@@ -172,6 +174,27 @@ export default async function handler(req, res) {
       ) {
         throw new HttpError(400, '요청 형식이 올바르지 않거나 자료가 너무 커요.');
       }
+    };
+
+    // 같은 코드에 덮어쓰기: 기존 비밀번호(인증키)가 맞아야만 바꾼다
+    if (action === 'overwrite') {
+      checkNewRecord();
+      checkCode(body.code);
+      if ((await hit(`create:${ip}`, IP_WINDOW)) > IP_MAX_CREATE) {
+        throw new HttpError(429, '짧은 시간에 너무 많이 올렸어요. 10분 뒤에 다시 시도해 주세요.');
+      }
+      await verify(body.code, body.auth, ip);
+      const { kind, salt, iv, ct, verifier } = body;
+      const expiresAt = schoolYearEnd();
+      const record = JSON.stringify({ v: 2, kind, salt, iv, ct, verifier, createdAt: Date.now(), expiresAt: expiresAt * 1000 });
+      await redis('SET', keyOf(body.code), record, 'EXAT', expiresAt);
+      await redis('DEL', legacyKeyOf(body.code));
+      return send(200, { code: body.code, kind, expiresAt: expiresAt * 1000 });
+    }
+
+    if (action === 'create') {
+      checkNewRecord();
+      const { kind, salt, iv, ct, verifier } = body;
       if ((await hit(`create:${ip}`, IP_WINDOW)) > IP_MAX_CREATE) {
         throw new HttpError(429, '짧은 시간에 너무 많이 올렸어요. 10분 뒤에 다시 시도해 주세요.');
       }
@@ -197,7 +220,7 @@ export default async function handler(req, res) {
       // 교사가 직접 정한 코드: 이미 있으면 덮어쓰지 않는다
       checkCode(body.code);
       if (await put(body.code)) return send(200, { code: body.code, kind, expiresAt: expiresAt * 1000 });
-      throw new HttpError(409, '이미 쓰고 있는 코드예요. 다른 코드를 정해 주세요.');
+      throw new HttpError(409, '이미 쓰고 있는 코드예요.', { exists: true });
     }
 
     if (action === 'salt') {
@@ -222,7 +245,7 @@ export default async function handler(req, res) {
 
     throw new HttpError(400, '알 수 없는 요청이에요.');
   } catch (e) {
-    if (e instanceof HttpError) return send(e.status, { error: e.message });
+    if (e instanceof HttpError) return send(e.status, { error: e.message, ...(e.extra || {}) });
     console.error('roster api error:', e?.message);
     return send(500, { error: '서버 오류가 발생했어요. 잠시 후 다시 시도해 주세요.' });
   }

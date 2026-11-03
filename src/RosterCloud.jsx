@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   uploadEncrypted,
+  overwriteEncrypted,
   downloadEncrypted,
   deleteEncrypted,
   passwordProblem,
@@ -30,6 +31,9 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
   const [pw2, setPw2] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [agree, setAgree] = useState(false);
+  // 같은 코드가 이미 있을 때: 기존 비밀번호를 넣으면 덮어쓰기
+  const [conflict, setConflict] = useState(false);
+  const [oldPw, setOldPw] = useState('');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
@@ -77,14 +81,43 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
     if (pw !== pw2) return setError('비밀번호 확인이 일치하지 않아요.');
     if (!agree) return setError('안내 사항을 확인하고 체크해 주세요.');
     run('암호화해서 보관하는 중…', async () => {
-      const payload = kind === 'result' ? { kind, className, ...getResult() } : { className, roster };
-      const r = await uploadEncrypted({ kind, payload, password: pw, codeText: code, autoLabel });
-      setPw('');
-      setPw2('');
-      onCode(r.display);
-      onSaved?.({ ...r, kind });
-      // 저장 완료 화면: 코드를 보여 주고 10초 뒤 자동으로 닫힘 (닫기 버튼으로 바로 닫을 수도 있음)
-      setResult(r);
+      let r;
+      try {
+        r = await uploadEncrypted({ kind, payload: makePayload(), password: pw, codeText: code, autoLabel });
+      } catch (e) {
+        if (e.exists) {
+          setConflict(true);
+          setOldPw('');
+          return;
+        }
+        throw e;
+      }
+      finishSave(r);
+    });
+  };
+
+  const makePayload = () => (kind === 'result' ? { kind, className, ...getResult() } : { className, roster });
+
+  const finishSave = (r) => {
+    setPw('');
+    setPw2('');
+    setOldPw('');
+    setConflict(false);
+    onCode(r.display);
+    onSaved?.({ ...r, kind });
+    // 저장 완료 화면: 코드를 보여 주고 10초 뒤 자동으로 닫힘 (닫기 버튼으로 바로 닫을 수도 있음)
+    setResult(r);
+  };
+
+  const doOverwrite = () => {
+    const problem = passwordProblem(pw);
+    if (problem) return setError(problem);
+    if (pw !== pw2) return setError('비밀번호 확인이 일치하지 않아요.');
+    if (!agree) return setError('안내 사항을 확인하고 체크해 주세요.');
+    if (!oldPw) return setError('덮어쓰려면 기존 비밀번호를 입력해 주세요.');
+    run('덮어쓰는 중…', async () => {
+      const r = await overwriteEncrypted({ kind, payload: makePayload(), password: pw, codeText: code, oldPassword: oldPw });
+      finishSave(r);
     });
   };
 
@@ -177,7 +210,10 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
         className="modal-input rc-input rc-code-input"
         placeholder={`예: ${CODE_EXAMPLE}`}
         value={code}
-        onChange={(e) => setCode(e.target.value)}
+        onChange={(e) => {
+          setCode(e.target.value);
+          setConflict(false);
+        }}
         onFocus={(e) => uploading && code === suggestion && e.target.select()}
         autoComplete="off"
         spellCheck={false}
@@ -191,7 +227,7 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
             <>추천 코드예요. 그대로 두면 이번 달 비어 있는 순번(첫번째, 두번째…)으로 만들고, 원하는 코드로 바꿔도 돼요.</>
           ) : (
             <>
-              직접 정한 코드로 보관해요. 이미 쓰고 있는 코드면 다른 코드를 정해 달라고 알려 드려요.{' '}
+              직접 정한 코드로 보관해요. 이미 쓰고 있는 코드면 경고가 뜨고, 기존 비밀번호를 넣으면 덮어쓸 수 있어요.{' '}
               <button type="button" className="link-btn" onClick={() => setCode(suggestion)}>
                 추천 코드로 되돌리기
               </button>
@@ -257,9 +293,47 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
             맞게 사용할게요.
           </span>
         </label>
-        <button className="modal-btn success" onClick={doUpload} disabled={!!busy}>
-          <Icon name="cloud_upload" /> {busy || '암호화해서 서버에 보관'}
-        </button>
+        {conflict ? (
+          <div className="rc-conflict" role="alert">
+            <b>⚠️ 「{code.trim().replace(/\s+/g, ' ')}」 코드는 이미 쓰고 있어요.</b>
+            <p>
+              덮어쓰면 <b>기존에 보관한 자료는 지워지고</b> 지금 자료로 바뀌어요. 덮어쓰려면 이 코드의 <b>기존 비밀번호</b>를
+              입력하세요. 저장 후 비밀번호는 위에 새로 입력한 비밀번호로 바뀌어요.
+            </p>
+            <input
+              type={showPw ? 'text' : 'password'}
+              className="modal-input rc-input"
+              placeholder="기존 비밀번호"
+              value={oldPw}
+              onChange={(e) => setOldPw(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && doOverwrite()}
+              autoComplete="off"
+              maxLength={128}
+              disabled={!!busy}
+              autoFocus
+            />
+            <div className="rc-saved-actions">
+              <button
+                className="modal-btn"
+                onClick={() => {
+                  setConflict(false);
+                  setError('');
+                  setCode('');
+                }}
+                disabled={!!busy}
+              >
+                다른 코드 쓰기
+              </button>
+              <button className="modal-btn danger" onClick={doOverwrite} disabled={!!busy}>
+                {busy || '덮어쓰기'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button className="modal-btn success" onClick={doUpload} disabled={!!busy}>
+            <Icon name="cloud_upload" /> {busy || '암호화해서 서버에 보관'}
+          </button>
+        )}
       </>
     );
   } else {

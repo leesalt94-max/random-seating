@@ -127,7 +127,12 @@ async function sha256Hex(b64str) {
   return hex(await crypto.subtle.digest('SHA-256', unb64(b64str)));
 }
 
-class ApiError extends Error {}
+class ApiError extends Error {
+  constructor(message, info = {}) {
+    super(message);
+    Object.assign(this, info);
+  }
+}
 
 async function call(body) {
   let res;
@@ -151,7 +156,7 @@ async function call(body) {
   }
   if (!res.ok) {
     // 우리 서버의 안내는 문자열, Vercel 플랫폼 오류는 { error: { code, message } } 형태로 온다
-    if (typeof data.error === 'string') throw new ApiError(data.error);
+    if (typeof data.error === 'string') throw new ApiError(data.error, { status: res.status, exists: !!data.exists });
     const code = (data.error && data.error.code) || res.headers.get('x-vercel-error') || '';
     const id = (res.headers.get('x-vercel-id') || '').split('::').pop();
     throw new ApiError(
@@ -174,6 +179,30 @@ export async function uploadEncrypted({ kind, payload, password, codeText, autoL
   const where = autoLabel ? { auto: { label: autoLabel } } : { code: canonCode(codeText) };
   const r = await call({ action: 'create', kind, ...where, salt: b64(salt), iv: b64(iv), ct: b64(ct), verifier: await sha256Hex(auth) });
   return { ...r, display: autoLabel ? displayCode(r.code) : String(codeText).trim().replace(/\s+/g, ' ') };
+}
+
+// 이미 있는 코드에 덮어쓰기: 기존 비밀번호로 인증하고, 새 자료는 지금 입력한 비밀번호로 암호화
+export async function overwriteEncrypted({ kind, payload, password, codeText, oldPassword }) {
+  const problem = passwordProblem(password) || codeProblem(codeText);
+  if (problem) throw new ApiError(problem);
+  if (!oldPassword) throw new ApiError('덮어쓰려면 기존 비밀번호를 입력해 주세요.');
+  const { c, auth } = await authFor(codeText, oldPassword);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const keys = await deriveKeys(password, salt);
+  const plain = new TextEncoder().encode(JSON.stringify({ v: 1, ...payload, savedAt: Date.now() }));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: AAD[kind] }, keys.aesKey, plain);
+  const r = await call({
+    action: 'overwrite',
+    kind,
+    code: c,
+    auth,
+    salt: b64(salt),
+    iv: b64(iv),
+    ct: b64(ct),
+    verifier: await sha256Hex(keys.auth),
+  });
+  return { ...r, display: String(codeText).trim().replace(/\s+/g, ' ') };
 }
 
 async function authFor(codeText, password) {
