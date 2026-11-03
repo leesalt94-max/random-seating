@@ -83,7 +83,7 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
       setPw2('');
       onCode(r.display);
       onSaved?.({ ...r, kind });
-      // 저장 완료 화면: 코드를 보여 주고 5초 뒤 자동으로 닫힘 (닫기 버튼으로 바로 닫을 수도 있음)
+      // 저장 완료 화면: 코드를 보여 주고 10초 뒤 자동으로 닫힘 (닫기 버튼으로 바로 닫을 수도 있음)
       setResult(r);
     });
   };
@@ -110,8 +110,8 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
     });
   };
 
-  // 저장 완료 후 5초 카운트다운
-  const [left, setLeft] = useState(5);
+  // 저장 완료 후 10초 카운트다운
+  const [left, setLeft] = useState(10);
   const saved = uploading && result && !result.deleted;
   useEffect(() => {
     if (!saved) return;

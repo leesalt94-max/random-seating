@@ -364,16 +364,16 @@ export default function App() {
     showToast('서버에서 자리 배치 결과를 불러왔어요.');
   };
 
-  // ── 회장·부회장 표시 ── 누를 때마다 회장 → 부회장 → 해제 (회장은 한 명)
+  // ── 회장·부회장 표시 ── 누를 때마다 회장 → 부회장 → 해제
+  // 회장은 한 명: 이미 회장이 있으면 다른 학생은 바로 부회장이 된다 (기존 회장 표시는 그대로)
   const onRoleClick = (i) => {
     const n = seats[i].studentNum;
     if (!n) return;
     const cur = roles[n];
     const next = { ...roles };
-    if (!cur) {
-      for (const k of Object.keys(next)) if (next[k] === '회장') delete next[k];
-      next[n] = '회장';
-    } else if (cur === '회장') next[n] = '부회장';
+    const hasPresident = Object.values(roles).includes('회장');
+    if (!cur) next[n] = hasPresident ? '부회장' : '회장';
+    else if (cur === '회장') next[n] = '부회장';
     else delete next[n];
     setRoles(next);
     sound.tick?.(1.3);
@@ -1023,7 +1023,7 @@ export default function App() {
         {phase === 'done' && roleMode && (
           <p className="reveal-status swap-hint">
             <Icon name="military_tech" style={{ fontSize: '1em' }} /> 학생 자리를 누를 때마다 회장 → 부회장 → 해제 순서로 바뀌어요
-            (회장은 한 명)
+            (회장은 한 명이라, 회장이 정해져 있으면 다음 학생은 부회장부터)
           </p>
         )}
         {phase === 'done' && swapMode && (
