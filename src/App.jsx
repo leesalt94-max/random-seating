@@ -1071,7 +1071,10 @@ export default function App() {
                 }}
                 title="학년·반 고치기"
               >
-                {className || '학년·반 입력'} <Icon name="edit" />
+                {className || '학년·반 입력'}
+                <span className="class-chip-hint">
+                  <Icon name="edit" /> 수정
+                </span>
               </button>
             )}
           </div>

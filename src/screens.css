@@ -97,3 +97,14 @@
 .print-sheet {
   max-width: 56.25rem; /* 16px 기준 900px */
 }
+
+/* 세로로 긴 화면(휴대폰 세로·세로형 태블릿): 자리판을 메뉴 바로 아래에 붙인다.
+   가운데 정렬이면 남는 세로 공간이 메뉴와 자리판 사이에 벌어져 보임 */
+@media (orientation: portrait) {
+  .desk-grid-container {
+    align-items: flex-start;
+  }
+  .desk-grid {
+    align-content: start;
+  }
+}

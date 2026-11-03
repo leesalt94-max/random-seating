@@ -105,9 +105,18 @@
   padding: 0.15rem 1rem;
   cursor: pointer;
 }
-.class-chip .material-symbols-rounded {
-  font-size: 0.8em;
-  opacity: 0.6;
+.class-chip-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15em;
+  font-size: 0.62em;
+  color: var(--wood-dark);
+  background: var(--chalk-yellow);
+  border-radius: 999px;
+  padding: 0.1em 0.6em;
+}
+.class-chip-hint .material-symbols-rounded {
+  font-size: 1em;
 }
 .class-chip:hover {
   border-color: var(--chalk-yellow);
