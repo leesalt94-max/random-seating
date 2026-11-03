@@ -125,14 +125,39 @@ export default function ResultOverlay({ mode, onClose, layout, roster, onRosterF
     else rootRef.current?.requestFullscreen?.().catch(() => {});
   };
 
+  // 인쇄·이미지 저장 공통: 화면의 자리표를 그대로 찍어 A4 세로 종이 위쪽에 놓은 그림을 만든다.
+  // 인쇄도 이 그림을 그대로 인쇄하므로, 인쇄물과 저장한 이미지가 똑같이 나온다.
+  const renderPage = async () => {
+    const el = sheetRef.current;
+    const scale = Math.min(3, Math.max(2, 2400 / el.offsetWidth));
+    const sheet = await html2canvas(el, { scale, backgroundColor: '#ffffff', useCORS: true });
+    const A4 = 297 / 210;
+    const margin = Math.round(sheet.width * 0.04);
+    let pageW = sheet.width + margin * 2;
+    let pageH = Math.round(pageW * A4);
+    if (sheet.height + margin * 2 > pageH) {
+      // 줄이 많아 세로로 길면 높이에 맞추고 좌우 가운데
+      pageH = sheet.height + margin * 2;
+      pageW = Math.round(pageH / A4);
+    }
+    const page = document.createElement('canvas');
+    page.width = pageW;
+    page.height = pageH;
+    const ctx = page.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, pageW, pageH);
+    ctx.drawImage(sheet, Math.round((pageW - sheet.width) / 2), margin); // 위쪽부터
+    return page;
+  };
+
   const saveImage = async () => {
     if (!sheetRef.current || saving) return;
     setSaving(true);
     try {
-      const canvas = await html2canvas(sheetRef.current, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+      const page = await renderPage();
       const a = document.createElement('a');
       a.download = `자리배치표_${className}_${teacherView ? '교사시점' : '학생시점'}.png`;
-      a.href = canvas.toDataURL('image/png');
+      a.href = page.toDataURL('image/png');
       a.click();
     } catch {
       alert('이미지 저장 중 오류가 발생했습니다.');
@@ -140,6 +165,39 @@ export default function ResultOverlay({ mode, onClose, layout, roster, onRosterF
       setSaving(false);
     }
   };
+
+  const [printImg, setPrintImg] = useState(null);
+  const [printing, setPrinting] = useState(false);
+  const printImgRef = useRef(null);
+  const doPrint = async () => {
+    if (!sheetRef.current || printing) return;
+    setPrinting(true);
+    try {
+      const page = await renderPage();
+      setPrintImg(page.toDataURL('image/png'));
+    } catch {
+      setPrinting(false);
+      alert('인쇄 준비 중 오류가 발생했습니다.');
+    }
+  };
+  // 그림이 준비되면 인쇄 창을 연다 (인쇄용 그림은 화면에는 보이지 않음)
+  useEffect(() => {
+    if (!printImg) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await printImgRef.current?.decode?.();
+      } catch {
+        // decode를 지원하지 않으면 바로 인쇄
+      }
+      if (cancelled) return;
+      setPrinting(false);
+      window.print();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [printImg]);
 
   if (mode === 'display') {
     return (
@@ -168,7 +226,10 @@ export default function ResultOverlay({ mode, onClose, layout, roster, onRosterF
   }
 
   return (
-    <div className="print-overlay">
+    <div className={`print-overlay ${printImg ? 'has-print-img' : ''}`}>
+      <div className="print-page" aria-hidden="true">
+        {printImg && <img ref={printImgRef} src={printImg} alt="" />}
+      </div>
       <div className="print-controls no-print">
         <button className="pctrl-btn close-btn" onClick={onClose}>
           <Icon name="close" /> 닫기
@@ -204,8 +265,8 @@ export default function ResultOverlay({ mode, onClose, layout, roster, onRosterF
               </>
             )}
           </button>
-          <button className="pctrl-btn print-btn" onClick={() => window.print()}>
-            <Icon name="print" /> 인쇄
+          <button className="pctrl-btn print-btn" onClick={doPrint} disabled={printing}>
+            <Icon name={printing ? 'progress_activity' : 'print'} className={printing ? 'spin' : ''} /> {printing ? '준비 중…' : '인쇄'}
           </button>
         </div>
       </div>

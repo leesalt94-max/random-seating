@@ -126,3 +126,42 @@
     border: 2px solid #3e2723 !important;
   }
 }
+
+/* ── 인쇄 = 저장 이미지와 같은 그림 (A4 세로, 위쪽부터) ── */
+.print-page {
+  display: none;
+}
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+  .app-container {
+    padding: 0 !important;
+    min-height: 0 !important;
+    max-width: none !important;
+  }
+  .print-overlay.has-print-img > *:not(.print-page) {
+    display: none !important;
+  }
+  .print-overlay.has-print-img .print-page {
+    display: block !important;
+  }
+  .print-page img {
+    display: block;
+    width: 210mm;
+    height: 296mm;
+    object-fit: contain;
+    object-position: top center;
+  }
+  .toast,
+  .confetti-layer {
+    display: none !important;
+  }
+}
