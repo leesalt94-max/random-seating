@@ -331,3 +331,9 @@
   color: #ffcc80;
   font-size: 1rem;
 }
+
+/* 자리판 화면 도구줄의 불러오기 버튼 */
+.control-btn.load-tool {
+  color: var(--chalk-yellow);
+  border-color: var(--chalk-yellow);
+}

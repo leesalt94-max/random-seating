@@ -260,7 +260,7 @@ export default function RosterCloud({ mode, roster, className, lastCode, onCode,
         <div className="rc-code-label">불러오기 코드</div>
         <div className="rc-code">{result.display}</div>
         <p className="rc-saved-note">
-          처음 화면의 「저장한 결과·명렬표 불러오기」에서 이 코드와 비밀번호로 열 수 있어요. {fmtDate(result.expiresAt - 1000)}
+          자리판 화면 위쪽의 「저장한 결과·명렬표 불러오기」에서 이 코드와 비밀번호로 열 수 있어요. {fmtDate(result.expiresAt - 1000)}
           까지 보관돼요.
         </p>
         <div className="rc-saved-actions">

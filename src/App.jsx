@@ -259,7 +259,7 @@ export default function App() {
         <br />
         {r.kind === 'result' ? '결과' : '명렬표'} 불러오기 코드: 「<b>{r.display}</b>」
         <br />
-        <small>처음 화면의 「저장한 결과·명렬표 불러오기」에서 코드와 비밀번호로 열 수 있어요.</small>
+        <small>자리판 화면 위쪽의 「저장한 결과·명렬표 불러오기」에서 코드와 비밀번호로 열 수 있어요.</small>
       </div>,
       9000,
     );
@@ -687,9 +687,6 @@ export default function App() {
       <div className="app-container">
         <div className="setup-view">
           <h1 className="setup-title">우리반 자리배치표</h1>
-          <button className="load-btn" onClick={() => setCloud('download')}>
-            <Icon name="cloud_download" /> 저장한 결과·명렬표 불러오기
-          </button>
           <div className="setup-top">
           <div className="input-group">
             <div className="input-wrapper">
@@ -1000,6 +997,9 @@ export default function App() {
                 <Icon name="badge" /> {roster ? `명렬표 ${rosterInfo.count}명` : '명렬표 (선택)'}
                 <input type="file" accept=".xlsx,.xls,.csv" onChange={onRosterFile} hidden />
               </label>
+              <button className="control-btn small load-tool" onClick={() => setCloud('download')}>
+                <Icon name="cloud_download" /> 저장한 결과·명렬표 불러오기
+              </button>
             </div>
             <p className="hint-text">
               {shortage > 0 ? (

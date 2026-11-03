@@ -272,7 +272,7 @@ export default function ResultOverlay({ mode, onClose, layout, roster, onRosterF
       </div>
       {!roster && (
         <div className="dummy-notice no-print">
-          <Icon name="info" /> 번호만 표시됩니다. 이름도 넣으려면 위의 「명렬표」에서 엑셀을 올리거나, 처음 화면에서 서버에 보관한 명렬표를 불러오세요. (선택 사항)
+          <Icon name="info" /> 번호만 표시됩니다. 이름도 넣으려면 위의 「명렬표」에서 엑셀을 올리거나, 자리판 화면의 「저장한 결과·명렬표 불러오기」로 서버에 보관한 명렬표를 불러오세요. (선택 사항)
         </div>
       )}
       <div className="print-sheet-wrapper">
